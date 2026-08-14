@@ -1,6 +1,10 @@
 # Dependencies
 /node_modules/
 
+# Local toolchains (build prerequisites, not project source)
+/JDK21/
+/JDK*/
+
 # Build output and distributables
 /dist/
 /dist-ssr/
