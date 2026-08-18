@@ -18,7 +18,7 @@
 三角洲战术地图将地图信息、阶段据点、兵棋部署、行动路线和战术标注集中到一个工作台中，适用于战前规划、队伍分工、战术复盘和自定义模式配置。
 
 项目支持浏览器、Windows 桌面端和 Android 横屏端，不依赖后端服务。编辑状态和战术方案默认保存在本地。
-<img width="2297" height="1182" alt="image" src="https://github.com/user-attachments/assets/abe3b32c-22c8-4570-b589-a0ac2649edb5" />
+<img width="100%" alt="image" src="https://github.com/user-attachments/assets/abe3b32c-22c8-4570-b589-a0ac2649edb5" />
 
 ## 主要功能
 
@@ -45,9 +45,9 @@
 - 新增绘图组件锁定：锁定后防移动/编辑/擦除，套索圈选含锁定图形时整组保护并提示。
 - 新增高阶菜单（地图协作、开屏视频入口）。
 - 支持鼠标中键拖动地图；修复选中框按钮缩放漂移、套索框缩放漂移等问题。
-<img width="1902" height="1160" alt="c9e1235062635d6841ad8515d58ae741" src="https://github.com/user-attachments/assets/22b81a8c-efcb-44bd-a204-7fcd4b9309fb" />
+<img width="100%" alt="c9e1235062635d6841ad8515d58ae741" src="https://github.com/user-attachments/assets/22b81a8c-efcb-44bd-a204-7fcd4b9309fb" />
 
-<img width="1377" height="1017" alt="Screenshot_20260819_040516" src="https://github.com/user-attachments/assets/6682a3ad-65ba-4b04-9b0e-fbce43c25e9e" />
+<img width="100%" alt="Screenshot_20260819_040516" src="https://github.com/user-attachments/assets/6682a3ad-65ba-4b04-9b0e-fbce43c25e9e" />
 
 <details>
 <summary>0.0.1 更新摘要（点击展开）</summary>
