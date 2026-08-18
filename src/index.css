@@ -5845,6 +5845,356 @@ body {
   padding: 6px 8px;
 }
 
+/* 局域网协作模式弹窗（LanCollabModal） */
+.tb-primary.danger {
+  border-color: #e05a4e;
+  background: #e05a4e;
+  color: #fff;
+}
+
+.lan-modal .tb-body {
+  gap: 12px;
+}
+
+.lan-running {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lan-address {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--gold);
+  text-align: center;
+  letter-spacing: 0.5px;
+  padding: 14px 8px;
+  border: 1px dashed var(--line-1);
+  border-radius: 4px;
+  background: rgba(255, 213, 74, 0.06);
+  user-select: all;
+}
+
+.lan-error {
+  color: #ff8a80;
+  border-color: rgba(224, 90, 78, 0.5);
+}
+
+/* Toolbar「地图协作」按钮（Android 主机端入口） */
+/* 高阶菜单（二级目录；母按钮复用 tactical-btn，与其他按钮同尺寸） */
+.toolbar .advanced-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.toolbar .advanced-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar .advanced-btn i {
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.toolbar .advanced-menu-wrap.open .advanced-btn i {
+  transform: rotate(180deg);
+}
+
+.toolbar .advanced-btn.running {
+  background: rgba(255, 213, 74, 0.12);
+}
+
+.toolbar .advanced-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 1300;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.toolbar .advanced-menu .map-select-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 菜单内图标统一跟随文字主题色（美术资源原色在深底上不可读），hover/激活态随文字变色 */
+.toolbar .advanced-menu svg path,
+.toolbar .advanced-submenu svg path {
+  fill: currentColor;
+}
+
+/* 「开屏视频」三级子菜单（flyout 在菜单项左侧，样式与 advanced-menu 一致） */
+.toolbar .advanced-submenu-wrap {
+  position: relative;
+}
+
+.toolbar .advanced-submenu-wrap .submenu-caret {
+  margin-left: auto;
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+.toolbar .advanced-submenu {
+  position: absolute;
+  right: calc(100% + 6px);
+  top: -4px;
+  z-index: 1300;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.toolbar .advanced-submenu .map-select-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 子菜单内「可跳过」勾选框（复用 Checkbox 组件，样式对齐 .left-panel 的 layer-item） */
+.toolbar .advanced-submenu .layer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--tx-1);
+  white-space: nowrap;
+  transition: background 0.12s ease;
+  position: relative;
+}
+
+.toolbar .advanced-submenu .layer-item:hover {
+  background: var(--bg-hover);
+  color: #fff;
+}
+
+.toolbar .advanced-submenu .cb-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toolbar .advanced-submenu .cb-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: 1px solid var(--line-2);
+  border-radius: 1px;
+  background: var(--bg-0);
+  color: var(--on-accent);
+  flex-shrink: 0;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.toolbar .advanced-submenu .cb-box svg {
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.toolbar .advanced-submenu .layer-item:hover .cb-box {
+  border-color: var(--tx-3);
+}
+
+.toolbar .advanced-submenu .cb-box.checked {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.toolbar .advanced-submenu .cb-box.checked svg {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.toolbar .advanced-submenu .cb-native:focus-visible + .cb-box {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+/* 开屏视频覆盖层（Android 冷启动）：全屏黑底，z-index 高于一切 */
+.splash-video-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-video-overlay.skippable {
+  cursor: pointer;
+}
+
+.splash-video-overlay video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* 「点击即可跳过」半透明小条幅（右下角，淡入后 5 秒由组件移除） */
+.splash-skip-hint {
+  position: absolute;
+  right: 16px;
+  bottom: 24px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  animation: splashSkipHintIn 0.3s ease-out;
+}
+
+@keyframes splashSkipHintIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 开屏视频结束后主界面淡入 */
+.app-fade-in {
+  animation: appFadeIn 0.5s ease-out;
+}
+
+@keyframes appFadeIn {
+  from { opacity: 0.2; }
+  to { opacity: 1; }
+}
+
+/* 访客端演示模式横幅（仅观看，固定顶部） */
+.lan-demo-banner {
+  position: relative;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(224, 138, 30, 0.92);
+  color: #1a1206;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
+/* 协作模式横幅（可编辑，绿色） */
+.lan-demo-banner.collab {
+  background: rgba(20, 160, 90, 0.92);
+  color: #06130c;
+}
+
+/* 横幅右侧关闭按钮（横幅本体 pointer-events:none，仅按钮可点） */
+.lan-banner-close {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.lan-banner-close:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* 横幅关闭后的状态光条：紧贴工具栏下方通栏 4px，缓慢闪烁（演示=橙色 / 协作=绿色） */
+.lan-banner-bar {
+  height: 4px;
+  z-index: 3000;
+  pointer-events: none;
+  animation: lanBannerBarBlink 2.4s ease-in-out infinite;
+}
+
+.lan-banner-bar.demo {
+  background: #e08a1e;
+  box-shadow: 0 0 8px rgba(224, 138, 30, 0.9);
+}
+
+.lan-banner-bar.collab {
+  background: #14a05a;
+  box-shadow: 0 0 8px rgba(20, 160, 90, 0.9);
+}
+
+@keyframes lanBannerBarBlink {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+/* 主机端（演示模式）：地图右下角「同步视角」开关 */
+.lan-view-sync-btn {
+  position: absolute;
+  right: 16px;
+  bottom: 24px;
+  z-index: 1200;
+  padding: 8px 14px;
+  border: 1px solid var(--line-1, #3a4147);
+  border-radius: 4px;
+  background: rgba(14, 17, 18, 0.92);
+  color: var(--tx-2, #b8c0c8);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.lan-view-sync-btn.on {
+  border-color: #14a05a;
+  color: #9dffc9;
+  box-shadow: 0 0 10px rgba(20, 160, 90, 0.45);
+}
+
+/* 访客端（演示模式）：右下角「视角同步中」状态标（半透明，不可点击） */
+.lan-view-sync-badge {
+  position: absolute;
+  right: 16px;
+  bottom: 24px;
+  z-index: 1200;
+  padding: 6px 12px;
+  border-radius: 4px;
+  background: rgba(14, 17, 18, 0.6);
+  border: 1px solid rgba(20, 160, 90, 0.6);
+  color: #9dffc9;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
 .tb-save-row {
   display: flex;
   gap: 8px;

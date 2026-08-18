@@ -142,16 +142,18 @@ function normalizeTeams(teams: unknown): Record<Side, TeamMarker[]> {
   return { attack: [], defense: [] }
 }
 
-export function loadState(): PersistedAppState | null {
+/**
+ * 校验并规范化一份已解析的 PersistedAppState（与 loadState 同款校验）。
+ * 供局域网协作模式接收远端快照时复用：非法/不支持的版本返回 null。
+ */
+export function normalizePersistedState(parsed: unknown): PersistedAppState | null {
   try {
-    const raw = localStorage.getItem(APP_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as PersistedAppState
+    const state = parsed as PersistedAppState
     // 兼容 v7（载具平铺数组）/ v8（载具分桶）：统一迁移为分桶形状，避免用户数据丢失
-    const v = parsed?.version
-    if (parsed && typeof parsed === 'object' && parsed.maps && typeof v === 'number' && v >= 7 && v <= 16) {
-      for (const id of Object.keys(parsed.maps)) {
-        const m = parsed.maps[id]
+    const v = state?.version
+    if (state && typeof state === 'object' && state.maps && typeof v === 'number' && v >= 7 && v <= 16) {
+      for (const id of Object.keys(state.maps)) {
+        const m = state.maps[id]
         if (m) {
           m.vehicles = normalizeVehicles(m.vehicles)
           m.buildings = normalizeBuildings(m.buildings)
@@ -171,14 +173,25 @@ export function loadState(): PersistedAppState | null {
         }
       }
       // v9→v10：战术方案库缺省为空数组（不丢历史数据）
-      if (!Array.isArray(parsed.plans)) parsed.plans = []
-      parsed.plans = parsed.plans.map((plan) => ({
+      if (!Array.isArray(state.plans)) state.plans = []
+      state.plans = state.plans.map((plan) => ({
         ...plan,
         routes: Array.isArray(plan.routes) ? plan.routes.map(normalizeTacticalRoute) : [],
       }))
-      return parsed
+      return state
     }
     return null
+  } catch (err) {
+    console.warn('[storage] 读取失败，将使用默认数据', err)
+    return null
+  }
+}
+
+export function loadState(): PersistedAppState | null {
+  try {
+    const raw = localStorage.getItem(APP_STORAGE_KEY)
+    if (!raw) return null
+    return normalizePersistedState(JSON.parse(raw))
   } catch (err) {
     console.warn('[storage] 读取失败，将使用默认数据', err)
     return null

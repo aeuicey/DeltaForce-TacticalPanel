@@ -90,6 +90,8 @@ interface LeftPanelProps {
   vehicles: VehicleItem[]
   buildings: BuildingUnit[]
   onAddBuilding: (kind: BuildingUnitKind, own: boolean, team?: OperatorTeam) => void
+  /** 演示模式访客只读：隐藏「兵棋推演」部署分组 */
+  hideWargame?: boolean
 }
 
 /**
@@ -137,6 +139,7 @@ export default function LeftPanel({
   vehicles,
   buildings,
   onAddBuilding,
+  hideWargame = false,
 }: LeftPanelProps) {
   const [liveWidth, setLiveWidth] = useState(() => clampLeftPanelWidth(width))
   const [resizing, setResizing] = useState(false)
@@ -339,7 +342,8 @@ export default function LeftPanel({
           </div>
         </details>
 
-      {/* 兵棋推演（干员队伍 + 联线控制） */}
+      {/* 兵棋推演（干员队伍 + 联线控制）；演示模式访客只读时隐藏 */}
+      {!hideWargame ? (
       <details
         className="panel-sec collapsible"
         open={sections.wargame}
@@ -386,6 +390,7 @@ export default function LeftPanel({
           onAddBuilding={onAddBuilding}
         />
       </details>
+      ) : null}
       </div>
     </aside>
   )

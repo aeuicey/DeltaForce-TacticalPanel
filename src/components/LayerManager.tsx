@@ -36,8 +36,10 @@ const LOCK_SHACKLE_PATH =
   'M512.1 791c-17.673 0-32-14.327-32-32V588.999c0-17.673 14.327-32 32-32 17.673 0 32 14.327 32 32V759c0 17.673-14.328 32-32 32zM297.472 446.595c-17.673 0-32-14.327-32-32 0-109.504 25.127-192.098 74.684-245.486 22.309-24.034 49.483-42.036 80.767-53.505 27.139-9.95 57.454-14.995 90.101-14.995 76.909 0 134.36 20.286 175.638 62.018 51.002 51.562 75.166 134.096 73.874 252.317-0.191 17.552-14.481 31.649-31.99 31.65-0.12 0-0.237 0-0.357-0.002-17.672-0.193-31.842-14.676-31.648-32.348 1.08-98.854-17.552-168.368-55.379-206.611-28.637-28.952-71.205-43.025-130.137-43.025-52.665 0-94.371 16.163-123.96 48.04-38.214 41.169-57.59 109.113-57.59 201.946-0.003 17.674-14.329 32.001-32.003 32.001z'
 const UNLOCK_SHACKLE_PATH =
   'M512.1 791c-17.673 0-32-14.327-32-32V588.999c0-17.673 14.327-32 32-32 17.673 0 32 14.327 32 32V759c0 17.673-14.328 32-32 32zM297.472 446.595c-17.673 0-32-14.327-32-32 0-109.504 25.127-192.098 74.684-245.486 22.309-24.034 49.483-42.036 80.767-53.505 27.139-9.95 57.454-14.995 90.101-14.995 64.215 0 114.448 14.036 153.567 42.911 22.108 16.319 40.617 37.577 55.012 63.183 14.526 25.841 25.306 56.97 32.037 92.523 3.288 17.365-8.124 34.106-25.488 37.395-17.363 3.291-34.106-8.123-37.395-25.488-19.446-102.703-72.6-146.523-177.733-146.523-52.665 0-94.371 16.163-123.96 48.04-38.214 41.169-57.59 109.113-57.59 201.946-0.002 17.674-14.329 31.999-32.002 31.999z'
-const LOCK_ICON_SVG = `<svg viewBox="0 0 1024 1024" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="${LOCK_BODY_PATH}"/><path d="${LOCK_SHACKLE_PATH}"/></svg>`
-const UNLOCK_ICON_SVG = `<svg viewBox="0 0 1024 1024" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="${LOCK_BODY_PATH}"/><path d="${UNLOCK_SHACKLE_PATH}"/></svg>`
+// 图标字形实际只占 1024 画布中央约 680×831 区域，裁剪 viewBox 使渲染尺寸与
+// 同排 Font Awesome 图标（约 13-14px）视觉一致，避免锁定图标显小。
+const LOCK_ICON_SVG = `<svg viewBox="160 90 700 851" width="13" height="16" fill="currentColor" aria-hidden="true"><path d="${LOCK_BODY_PATH}"/><path d="${LOCK_SHACKLE_PATH}"/></svg>`
+const UNLOCK_ICON_SVG = `<svg viewBox="160 90 700 851" width="13" height="16" fill="currentColor" aria-hidden="true"><path d="${LOCK_BODY_PATH}"/><path d="${UNLOCK_SHACKLE_PATH}"/></svg>`
 
 function offsetGeoCoordinates(value: unknown, dLng: number, dLat: number): unknown {
   if (!Array.isArray(value)) return value
@@ -99,6 +101,8 @@ interface LayerManagerProps {
   onMoveTeams?: (updates: Record<string, [number, number]>) => void
   /** 批量删除队标（套索 Delete/删除按钮，App 入历史栈） */
   onDeleteTeams?: (uids: string[]) => void
+  /** 移动端协作访客：启用触控桥接（与 Android WebView 同款三段事件桥接） */
+  touchBridge?: boolean
 }
 
 /** 线型 → dashArray */
@@ -571,6 +575,7 @@ export default function LayerManager({
   teamPosRef,
   onMoveTeams,
   onDeleteTeams,
+  touchBridge = false,
 }: LayerManagerProps) {
   const map = useMap()
   const fgRef = useRef<L.FeatureGroup | null>(null)
@@ -753,8 +758,9 @@ export default function LayerManager({
   // Android WebView 的触控不会稳定地产生 Leaflet mousedown/mousemove/mouseup，
   // 而现有绘制器以这组三段事件为统一协议。仅在 Android 绘制模式下桥接触控指针，
   // PC 端继续走原生鼠标事件，避免改变桌面交互。
+  // 移动端协作访客（touchBridge，手机浏览器访问主机）同样启用桥接，获得与主机一致的触控操作逻辑。
   useEffect(() => {
-    if (platform.kind !== 'android') return
+    if (platform.kind !== 'android' && !touchBridge) return
     const container = map.getContainer()
     let activePointerId: number | null = null
     let activePointerOnDrawLayer = false
@@ -952,7 +958,7 @@ export default function LayerManager({
       container.removeEventListener('mouseup', suppressCompatibilityMouse, true)
       container.removeEventListener('click', suppressCompatibilityMouse, true)
     }
-  }, [map, tool])
+  }, [map, tool, touchBridge])
 
   // 绘制工具激活时：捕获阶段拦截非绘制层的一切"选择型"鼠标事件，
   // 鼠标在绘制模式下完全失去普通用途——点击/悬停/右键不会选中任何区域、标记或弹出提示。
@@ -3999,9 +4005,9 @@ export default function LayerManager({
   const startHandleDragRef = useRef(startHandleDrag)
   startHandleDragRef.current = startHandleDrag
 
-  /** Android：双指在已选图形上捏合时，对选中集合做等比例缩放。 */
+  /** Android / 移动端协作访客：双指在已选图形上捏合时，对选中集合做等比例缩放。 */
   const startAndroidPinch = useCallback((a: L.Point, b: L.Point): boolean => {
-    if (platform.kind !== 'android') return false
+    if (platform.kind !== 'android' && !touchBridge) return false
     // 结束第一根手指刚建立的普通点击/拖动候选会话，再切换为双指缩放。
     finishShapePointerRef.current()
     // 锁定图形不参与捏合缩放
@@ -4036,7 +4042,7 @@ export default function LayerManager({
     }
     editPointerActiveRef.current = true
     return true
-  }, [layersOfKeys, map, selectedKeys, snapshotNow])
+  }, [layersOfKeys, map, selectedKeys, snapshotNow, touchBridge])
 
   const moveAndroidPinch = useCallback((a: L.Point, b: L.Point) => {
     const session = androidPinchSessionRef.current

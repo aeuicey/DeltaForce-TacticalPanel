@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
 import * as L from 'leaflet'
 import type {
   CapturePoint,
@@ -21,7 +21,7 @@ import type {
   WargameState,
 } from './types'
 import { MAP_BY_ID } from './config/maps'
-import { buildingsBucketOf, createEmptyMapState, loadState, saveState, vehiclesBucketOf, operatorsBucketOf, connectionsBucketOf, teamsBucketOf, routesBucketOf, wargameOf } from './utils/storage'
+import { buildingsBucketOf, createEmptyMapState, loadState, normalizePersistedState, saveState, vehiclesBucketOf, operatorsBucketOf, connectionsBucketOf, teamsBucketOf, routesBucketOf, wargameOf } from './utils/storage'
 import { emptyGeoJson, genUid } from './utils/geo'
 import { buildTacticalHtml, downloadText } from './utils/exportTactical'
 import type { CustomVehicleTemplate } from './config/customVehicles'
@@ -48,6 +48,17 @@ import {
   saveModeConfigStore,
 } from './utils/modeConfigStorage'
 import { platform } from './platform'
+import {
+  addLanStateReceivedListener,
+  getLanServerInfo,
+  pushLanState,
+  pushLanView,
+  type LanServerInfo,
+  type LanSessionMode,
+} from './platform/lanServer'
+import type { PluginListenerHandle } from '@capacitor/core'
+import LanCollabModal from './components/LanCollabModal'
+import SplashVideoOverlay from './components/SplashVideoOverlay'
 import { useDeviceType } from './hooks/useDeviceType'
 import { propsForPlatform, stagesForPlatform, type GameDataPlatform } from './config/gameDataPlatform'
 
@@ -109,6 +120,49 @@ function syncRouteTargetPosition(
     if (route.target?.kind !== kind || route.target.uid !== uid) return route
     return { ...route, waypoints: [...route.waypoints.slice(0, -1), point] }
   }))
+}
+
+// ---- 开屏视频（Android 独占） ----
+/** localStorage 配置键；自定义视频写入 Directory.Data 下的固定文件名 */
+const SPLASH_VIDEO_KEY = 'deltaforce-splash-video'
+const SPLASH_VIDEO_FILENAME = 'splash-video.mp4'
+
+interface SplashVideoConfig {
+  /** 自定义视频播放 URI（Capacitor.convertFileSrc 结果）；null 表示使用内置默认视频 */
+  videoUri: string | null
+  /** 可跳过：播放中任意点击/触摸关闭 */
+  skippable: boolean
+}
+
+const DEFAULT_SPLASH_VIDEO_CONFIG: SplashVideoConfig = { videoUri: null, skippable: true }
+
+function loadSplashVideoConfig(): SplashVideoConfig {
+  try {
+    const raw = localStorage.getItem(SPLASH_VIDEO_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<SplashVideoConfig>
+      return {
+        videoUri: typeof parsed.videoUri === 'string' ? parsed.videoUri : null,
+        skippable: parsed.skippable !== false,
+      }
+    }
+  } catch {
+    // 配置损坏时回退默认
+  }
+  return DEFAULT_SPLASH_VIDEO_CONFIG
+}
+
+/** 局域网协作瞬时提示（竖屏提醒 / 权限更改）：复用 draw-toast 样式，约 4 秒自动消失。 */
+function LanFlashToast({ msg, toastKey }: { msg: string; toastKey: number }) {
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    if (!msg || toastKey === 0) return
+    setVisible(true)
+    const timer = window.setTimeout(() => setVisible(false), 4000)
+    return () => window.clearTimeout(timer)
+  }, [msg, toastKey])
+  if (!visible) return null
+  return <div className="draw-toast">{msg}</div>
 }
 
 export default function App() {
@@ -293,6 +347,157 @@ export default function App() {
   }))
 
   const mapRef = useRef<L.Map | null>(null)
+  // ---- 局域网协作模式 ----
+  // 主机端（Android）：协作弹窗开关 + 服务器运行信息
+  const [lanCollabOpen, setLanCollabOpen] = useState(false)
+  const [lanSession, setLanSession] = useState<LanServerInfo | null>(null)
+  // 访客端（web 浏览器访问主机地址）：探测命中后进入访客模式
+  const [lanVisitor, setLanVisitor] = useState<{ mode: LanSessionMode } | null>(null)
+  // 应用远端快照时置位，跳过随后一次 push/POST，防止回环
+  const applyingRemoteRef = useRef(false)
+  const lanRevRef = useRef(-1)
+  // 最近一次推送/应用的快照 JSON，用于访客端跳过内容未变的重复 POST
+  const lanLastJsonRef = useRef('')
+  // 顶部横幅（演示/协作）关闭后收缩为缓慢闪烁光条；模式切换时重置为展开
+  const [lanBannerDismissed, setLanBannerDismissed] = useState(false)
+  // 瞬时提示（竖屏提醒 / 权限更改）：{msg,key} + 定时自动消失
+  const [lanFlash, setLanFlash] = useState<{ msg: string; key: number }>({ msg: '', key: 0 })
+  // 主机端「同步视角」开关与推送序号（仅演示模式）
+  const [lanViewSyncOn, setLanViewSyncOn] = useState(false)
+  const lanViewSeqRef = useRef(0)
+  // 访客端视角同步：最近收到的 viewRev 及其时间戳 / 当前跟随视角 / 状态标显隐
+  const lanViewRevRef = useRef(-1)
+  const lanViewRevAtRef = useRef(0)
+  const [lanSyncView, setLanSyncView] = useState<{ center: [number, number]; zoom: number; seq: number } | null>(null)
+  const [lanViewSyncActive, setLanViewSyncActive] = useState(false)
+
+  // ---- 开屏视频（Android 独占） ----
+  // 默认视频内置（public/video/intro.mp4），故 Android 冷启动始终先播放
+  const [splashConfig, setSplashConfig] = useState<SplashVideoConfig>(loadSplashVideoConfig)
+  const [splashPlaying, setSplashPlaying] = useState(() => platform.kind === 'android')
+  // 关闭后置位，根 div 追加 app-fade-in 淡入主界面
+  const [splashDone, setSplashDone] = useState(() => platform.kind !== 'android')
+  const splashFileRef = useRef<HTMLInputElement>(null)
+
+  const updateSplashConfig = useCallback((patch: Partial<SplashVideoConfig>) => {
+    setSplashConfig((current) => {
+      const next = { ...current, ...patch }
+      localStorage.setItem(SPLASH_VIDEO_KEY, JSON.stringify(next))
+      return next
+    })
+  }, [])
+
+  const handleSplashClose = useCallback(() => {
+    setSplashPlaying(false)
+    setSplashDone(true)
+  }, [])
+
+  const handlePickSplashVideo = useCallback(() => {
+    splashFileRef.current?.click()
+  }, [])
+
+  // 选择自定义视频：FileReader → base64 → 写入 Directory.Data → 换算播放 URI
+  const handleSplashFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.currentTarget.value = ''
+    if (!file) return
+    const isMp4 = file.type === 'video/mp4' || /\.mp4$/i.test(file.name)
+    if (!isMp4) {
+      window.alert('仅支持 MP4 格式的开屏视频，请重新选择。')
+      return
+    }
+    void (async () => {
+      try {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(String(reader.result))
+          reader.onerror = () => reject(reader.error)
+          reader.readAsDataURL(file)
+        })
+        const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
+        const { Filesystem, Directory } = await import('@capacitor/filesystem')
+        const { Capacitor } = await import('@capacitor/core')
+        await Filesystem.writeFile({
+          path: SPLASH_VIDEO_FILENAME,
+          data: base64,
+          directory: Directory.Data,
+          recursive: true,
+        })
+        const { uri } = await Filesystem.getUri({ path: SPLASH_VIDEO_FILENAME, directory: Directory.Data })
+        updateSplashConfig({ videoUri: Capacitor.convertFileSrc(uri) })
+      } catch (err) {
+        console.error('开屏视频保存失败', err)
+        window.alert('开屏视频保存失败，请重试。')
+      }
+    })()
+  }, [updateSplashConfig])
+
+  // 恢复默认视频：清配置，并尽力删除已写入的自定义视频文件
+  const handleResetSplashVideo = useCallback(() => {
+    localStorage.removeItem(SPLASH_VIDEO_KEY)
+    setSplashConfig(DEFAULT_SPLASH_VIDEO_CONFIG)
+    void import('@capacitor/filesystem')
+      .then(({ Filesystem, Directory }) =>
+        Filesystem.deleteFile({ path: SPLASH_VIDEO_FILENAME, directory: Directory.Data }),
+      )
+      .catch(() => { /* 自定义视频文件可能不存在，忽略 */ })
+  }, [])
+
+  // ---- 演示模式访客只读 ----
+  // 锁定绘制工具为查看（pan），编辑类操作（撤销/删除/清空/切换工具）全部拦截
+  const demoReadOnly = lanVisitor?.mode === 'demo'
+  // updateMap 等无依赖回调里读取的镜像（演示全权限锁定总闸用）
+  const demoReadOnlyRef = useRef(false)
+  useEffect(() => {
+    demoReadOnlyRef.current = demoReadOnly
+  }, [demoReadOnly])
+  useEffect(() => {
+    if (demoReadOnly && tool !== 'pan') setTool('pan')
+  }, [demoReadOnly, tool])
+  // 瞬时提示（竖屏提醒 / 权限更改横幅），key 自增触发重播
+  const showLanFlash = useCallback((msg: string) => {
+    setLanFlash((current) => ({ msg, key: current.key + 1 }))
+  }, [])
+  const handleToolSelect = useCallback(
+    (t: ToolMode) => {
+      if (lanVisitor?.mode === 'demo') return
+      setTool(t)
+    },
+    [lanVisitor],
+  )
+
+  // 移动端协作访客（手机浏览器访问主机）：自动切换移动端操作逻辑（触控桥接）并提示
+  const mobileVisitor = Boolean(lanVisitor) && (device.coarsePointer || device.mobileLayout)
+  const mobileVisitorNotifiedRef = useRef(false)
+  useEffect(() => {
+    if (!mobileVisitor) {
+      mobileVisitorNotifiedRef.current = false
+      return
+    }
+    if (mobileVisitorNotifiedRef.current) return
+    mobileVisitorNotifiedRef.current = true
+    setLanFlash((current) => ({ msg: '检测到移动端访问，已切换移动端操作模式', key: current.key + 1 }))
+  }, [mobileVisitor])
+
+  /** 校验并应用远端整份快照（与 loadState 同款 normalize；非法数据直接忽略）。 */
+  const applyRemoteState = useCallback((raw: string) => {
+    let normalized: ReturnType<typeof normalizePersistedState> = null
+    try {
+      normalized = normalizePersistedState(JSON.parse(raw))
+    } catch {
+      normalized = null
+    }
+    if (!normalized) return
+    applyingRemoteRef.current = true
+    lanLastJsonRef.current = raw
+    setMaps(normalized.maps)
+    setPlans(normalized.plans)
+    setUi(normalized.ui)
+    setMapId(normalized.lastMapId)
+    setView(normalized.lastView)
+    setProgress(normalized.progress)
+  }, [])
+
   const [cinematicTouchMap, setCinematicTouchMap] = useState<L.Map | null>(null)
   const touchDemoStartedRef = useRef(false)
   const pawnMotionStartedRef = useRef(false)
@@ -338,6 +543,8 @@ export default function App() {
   }, [activeModeMap, modeStageKey])
 
   const updateMap = useCallback((id: string, fn: (s: MapState) => MapState) => {
+    // 演示模式访客只读：地图数据修改总闸（远端快照 applyRemoteState 走 setMaps 不经此）
+    if (demoReadOnlyRef.current) return
     setMaps((prev) => ({
       ...prev,
       [id]: fn(prev[id] ?? createEmptyMapState()),
@@ -505,6 +712,7 @@ export default function App() {
   /** 绘制操作提交（LayerManager 上报 before/after GeoJSON，App 统一入栈 + 落盘） */
   const handleCommitDraw = useCallback(
     (beforeStr: string, afterStr: string) => {
+      if (demoReadOnly) return
       const cur = mapsRef.current[mapId] ?? createEmptyMapState()
       const curBucket = vehiclesBucketOf(cur)
       const ops = operatorsBucketOf(cur)
@@ -522,7 +730,7 @@ export default function App() {
       pushEntry(mk(beforeStr), mk(afterStr))
       updateMap(mapId, (s) => ({ ...s, drawings: { ...s.drawings, [view]: afterStr } }))
     },
-    [mapId, view, pushEntry, updateMap],
+    [mapId, view, pushEntry, updateMap, demoReadOnly],
   )
 
   useEffect(() => {
@@ -1153,6 +1361,7 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return
+      if (lanVisitor?.mode === 'demo') return
       const target = event.target as HTMLElement | null
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
       const key = event.key.toLowerCase()
@@ -1167,7 +1376,7 @@ export default function App() {
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [handleRedo, handleUndo])
+  }, [handleRedo, handleUndo, lanVisitor])
 
   // 删除选中（第十二轮：套索圈选后工具栏按钮删除；信号 + 是否有选中上报）
   const [deleteSelectedTick, setDeleteSelectedTick] = useState(0)
@@ -1192,6 +1401,8 @@ export default function App() {
   // 自动持久化（v14：载具队伍 + 行动指令 V2 + 干员独立任务；旧版本由 storage 统一迁移）
   useEffect(() => {
     if (isCinematicDemoFrame) return
+    // 局域网访客：不写本机 localStorage，避免污染访客本机数据
+    if (lanVisitor) return
     const snapshot = { version: 16 as const, lastMapId: mapId, lastView: view, maps, progress, plans, ui }
     // 桌面端连续编辑时合并密集写入；Android 保留已验收的持久化行为。
     if (platform.kind === 'android') {
@@ -1200,7 +1411,188 @@ export default function App() {
     }
     const timer = window.setTimeout(() => saveState(snapshot), 250)
     return () => window.clearTimeout(timer)
-  }, [isCinematicDemoFrame, maps, mapId, view, progress, plans, ui])
+  }, [isCinematicDemoFrame, lanVisitor, maps, mapId, view, progress, plans, ui])
+
+  // ---- 局域网协作：主机端（Android）----
+  // 启动时恢复服务器运行状态（页面重载后原生服务器可能仍在运行）
+  useEffect(() => {
+    if (platform.kind !== 'android') return
+    void getLanServerInfo().then((info) => {
+      if (info.running) setLanSession(info)
+    })
+  }, [])
+
+  // 主机：快照变化时推送到内嵌服务器（供局域网访客拉取）
+  useEffect(() => {
+    if (platform.kind !== 'android' || !lanSession?.running) return
+    if (applyingRemoteRef.current) {
+      applyingRemoteRef.current = false
+      return
+    }
+    const snapshot = { version: 16 as const, lastMapId: mapId, lastView: view, maps, progress, plans, ui }
+    lanLastJsonRef.current = JSON.stringify(snapshot)
+    void pushLanState(lanLastJsonRef.current)
+  }, [lanSession, maps, mapId, view, progress, plans, ui])
+
+  // 主机（collab 模式）：接收访客 POST 上来的整份状态并应用（LWW，原生侧已 bump rev）
+  useEffect(() => {
+    if (platform.kind !== 'android' || !lanSession?.running || lanSession.mode !== 'collab') return
+    let handle: PluginListenerHandle | null = null
+    let disposed = false
+    void addLanStateReceivedListener((event) => {
+      applyRemoteState(event.state)
+    }).then((h) => {
+      if (disposed) void h?.remove()
+      else handle = h
+    })
+    return () => {
+      disposed = true
+      void handle?.remove()
+    }
+  }, [lanSession, applyRemoteState])
+
+  // 主机（演示模式）：开启「同步视角」后每 800ms 推送当前视角，访客端跟随
+  useEffect(() => {
+    if (platform.kind !== 'android' || !lanViewSyncOn || !lanSession?.running || lanSession.mode !== 'demo') return
+    const push = () => {
+      const map = mapRef.current
+      if (!map) return
+      const center = map.getCenter()
+      lanViewSeqRef.current += 1
+      void pushLanView(center.lat, center.lng, map.getZoom(), lanViewSeqRef.current)
+    }
+    push()
+    const timer = window.setInterval(push, 800)
+    return () => window.clearInterval(timer)
+  }, [lanViewSyncOn, lanSession])
+
+  // 会话停止或切到协作模式时，复位「同步视角」开关
+  useEffect(() => {
+    if (!lanSession?.running || lanSession.mode !== 'demo') setLanViewSyncOn(false)
+  }, [lanSession])
+
+  // ---- 局域网协作：访客端（web 浏览器）----
+  // 启动时探测当前地址是否为主机内嵌服务器（2s 超时，命中即进入访客模式）
+  useEffect(() => {
+    if (platform.kind !== 'web' || isCinematicDemoFrame) return
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), 2000)
+    fetch('/api/session', { cache: 'no-store', signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { mode?: unknown } | null) => {
+        if (data && (data.mode === 'demo' || data.mode === 'collab')) {
+          setLanVisitor({ mode: data.mode })
+        }
+      })
+      .catch(() => {
+        // 非主机地址（普通 web 部署），忽略
+      })
+      .finally(() => window.clearTimeout(timer))
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [isCinematicDemoFrame])
+
+  // 访客端竖屏提醒：进入访客模式或旋转为竖屏时提示（约 4 秒自动消失）
+  useEffect(() => {
+    if (lanVisitor && device.portrait) showLanFlash('建议切换横屏获得更好体验')
+  }, [lanVisitor, device.portrait, showLanFlash])
+
+  // 访客：每 1s 轮询 /api/session（比对 mode/rev/viewRev），变化时拉取对应数据应用
+  useEffect(() => {
+    if (!lanVisitor) return
+    let cancelled = false
+    const pull = async () => {
+      try {
+        const sessionRes = await fetch('/api/session', { cache: 'no-store' })
+        if (!sessionRes.ok) return
+        const session = (await sessionRes.json()) as { rev?: unknown; mode?: unknown; viewRev?: unknown }
+        // 主机运行中切换了协作模式：更新权限 + 瞬时提示 + 重置横幅展开与 rev
+        const nextMode = session.mode === 'demo' || session.mode === 'collab' ? session.mode : null
+        if (nextMode && nextMode !== lanVisitor.mode) {
+          lanRevRef.current = -1
+          lanViewRevRef.current = -1
+          setLanBannerDismissed(false)
+          setLanVisitor({ mode: nextMode })
+          showLanFlash(nextMode === 'demo' ? '权限更改 · 当前模式为演示模式' : '权限更改 · 当前模式为战术协作模式')
+          return
+        }
+        // 视角同步（仅演示模式）：viewRev 增长时拉取 /api/view 跟随主机视角
+        if (lanVisitor.mode === 'demo') {
+          const viewRev = typeof session.viewRev === 'number' ? session.viewRev : -1
+          if (viewRev > lanViewRevRef.current) {
+            lanViewRevRef.current = viewRev
+            lanViewRevAtRef.current = Date.now()
+            setLanViewSyncActive(true)
+            const viewRes = await fetch('/api/view', { cache: 'no-store' })
+            if (viewRes.ok) {
+              const data = (await viewRes.json()) as { view?: unknown }
+              if (typeof data.view === 'string') {
+                try {
+                  const parsed = JSON.parse(data.view) as { centerLat?: unknown; centerLng?: unknown; zoom?: unknown; seq?: unknown }
+                  if (!cancelled && typeof parsed.centerLat === 'number' && typeof parsed.centerLng === 'number' && typeof parsed.zoom === 'number') {
+                    setLanSyncView({
+                      center: [parsed.centerLat, parsed.centerLng],
+                      zoom: parsed.zoom,
+                      seq: typeof parsed.seq === 'number' ? parsed.seq : viewRev,
+                    })
+                  }
+                } catch {
+                  // 视角数据非法时忽略，等待下一轮
+                }
+              }
+            }
+          } else if (Date.now() - lanViewRevAtRef.current > 3000) {
+            // 主机已关闭同步（3 秒无 viewRev 增长）：隐藏「视角同步中」状态标
+            setLanViewSyncActive(false)
+          }
+        }
+        const rev = typeof session.rev === 'number' ? session.rev : lanRevRef.current
+        if (rev === lanRevRef.current) return
+        const stateRes = await fetch('/api/state', { cache: 'no-store' })
+        if (!stateRes.ok) return
+        const data = (await stateRes.json()) as { rev?: unknown; state?: unknown }
+        if (cancelled || typeof data.state !== 'string') return
+        lanRevRef.current = typeof data.rev === 'number' ? data.rev : rev
+        applyRemoteState(data.state)
+      } catch {
+        // 主机离线时保持当前画面，下一轮继续尝试
+      }
+    }
+    void pull()
+    const timer = window.setInterval(() => void pull(), 1000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [lanVisitor, applyRemoteState, showLanFlash])
+
+  // 访客（collab 模式）：本地快照变化时 POST 回主机（演示模式不 POST、不持久化）
+  useEffect(() => {
+    if (!lanVisitor || lanVisitor.mode !== 'collab') return
+    if (applyingRemoteRef.current) {
+      applyingRemoteRef.current = false
+      return
+    }
+    const snapshot = { version: 16 as const, lastMapId: mapId, lastView: view, maps, progress, plans, ui }
+    const json = JSON.stringify(snapshot)
+    // 与应用远端快照后的回环 POST 去重（内容未变不上报）
+    if (json === lanLastJsonRef.current) return
+    lanLastJsonRef.current = json
+    fetch('/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: json,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { rev?: unknown } | null) => {
+        if (data && typeof data.rev === 'number') lanRevRef.current = data.rev
+      })
+      .catch(() => {
+        // 主机不可达时忽略，本地修改保留
+      })
+  }, [lanVisitor, maps, mapId, view, progress, plans, ui])
 
   useEffect(() => {
     if (isCinematicDemoFrame) return
@@ -1266,6 +1658,26 @@ export default function App() {
     mapRef.current = m
     if (isCinematicTouchPrinciples || isCinematicPawnMotion || isCinematicUnitCards || isCinematicRouteGrow || cinematicDefenseDemo || isCinematicStylePanelDemo) setCinematicTouchMap(m)
   }, [cinematicDefenseDemo, isCinematicPawnMotion, isCinematicRouteGrow, isCinematicStylePanelDemo, isCinematicTouchPrinciples, isCinematicUnitCards])
+
+  // 「同步视角」按钮：点击切换开/关；长按约 500ms 弹出使用说明（长按后不触发点击切换）
+  const syncBtnPressRef = useRef<{ timer: number; longFired: boolean }>({ timer: 0, longFired: false })
+  const handleSyncBtnPressStart = useCallback(() => {
+    syncBtnPressRef.current.longFired = false
+    syncBtnPressRef.current.timer = window.setTimeout(() => {
+      syncBtnPressRef.current.longFired = true
+      window.alert('同步视角：开启后，演示模式访客的地图视角将实时跟随主机（约每 0.8 秒同步一次），访客端右下角显示「视角同步中」。再次点击按钮即可关闭同步。')
+    }, 500)
+  }, [])
+  const handleSyncBtnPressEnd = useCallback(() => {
+    window.clearTimeout(syncBtnPressRef.current.timer)
+  }, [])
+  const handleSyncBtnClick = useCallback(() => {
+    if (syncBtnPressRef.current.longFired) {
+      syncBtnPressRef.current.longFired = false
+      return
+    }
+    setLanViewSyncOn((on) => !on)
+  }, [])
 
   const handleLayerChange = useCallback((key: keyof LayerVisibility, value: boolean) => {
     setUi((u) => {
@@ -1499,10 +1911,12 @@ export default function App() {
   )
 
   // 点击出生点：弹出底部载具部署栏（仅基地类出生点有载具，附属复活点 baseName=null 不弹）
+  // 演示模式访客只读：不弹部署栏
   const handleSpawnSelect = useCallback((spawn: { stageId: string; side: Side; pos: [number, number]; baseName: string | null }) => {
+    if (demoReadOnly) return
     if (!spawn.baseName) return
     setDeployTarget(spawn)
-  }, [])
+  }, [demoReadOnly])
 
   // 部署载具：放置到出生点附近（同种多辆时沿纬度方向错开），整批为一条历史
   // own = 该出生点是否为当前视角的本方（攻方视角点攻方复活点=本方绿，点守方复活点=敌方红）
@@ -1620,12 +2034,13 @@ export default function App() {
 
   const handleDrawSaved = useCallback(
     (side: Side, geoJson: string) => {
+      if (demoReadOnly) return
       updateMap(mapId, (s) => ({
         ...s,
         drawings: { ...s.drawings, [side]: geoJson },
       }))
     },
-    [updateMap, mapId],
+    [updateMap, mapId, demoReadOnly],
   )
 
   const clearCurrentDraw = useCallback(() => {
@@ -1715,10 +2130,11 @@ export default function App() {
   }, [clearAllMapContent, config.name])
 
   const handleResetProgress = useCallback(() => {
+    if (demoReadOnly) return
     if (!window.confirm('确定重置本图攻防进度？所有阶段回到未激活状态。')) return
     setProgress((prev) => ({ ...prev, [mapId]: 0 }))
     setSelectedPoint(null)
-  }, [mapId])
+  }, [mapId, demoReadOnly])
 
   // ================= 兵棋推演 =================
   const state = maps[mapId] ?? createEmptyMapState()
@@ -2075,6 +2491,7 @@ export default function App() {
   /** 保存当前战术为方案（自定义名称；记录当前 地图×阶段×视角 的完整部署快照） */
   const handleSavePlan = useCallback(
     (name: string) => {
+      if (demoReadOnly) return
       const cur = mapsRef.current[mapId] ?? createEmptyMapState()
       const stageId = stages[capturedStageIndex]?.id ?? 'S1'
       const plan: TacticalPlan = {
@@ -2093,12 +2510,13 @@ export default function App() {
       }
       setPlans((prev) => [...prev, plan])
     },
-    [mapId, view, capturedStageIndex, stages],
+    [mapId, view, capturedStageIndex, stages, demoReadOnly],
   )
 
   /** 应用方案：将方案快照写入当前地图/视角（阶段由用户自行切换），入历史栈 */
   const handleApplyPlan = useCallback(
     (plan: TacticalPlan) => {
+      if (demoReadOnly) return
       const cur = mapsRef.current[mapId] ?? createEmptyMapState()
       const before = cloneState(cur)
       const veh = (plan.vehicles ?? []).map((v) => ({ ...v }))
@@ -2127,13 +2545,14 @@ export default function App() {
       }
       pushEntry(before, after)
     },
-    [mapId, view, cloneState, pushEntry, updateMap],
+    [mapId, view, cloneState, pushEntry, updateMap, demoReadOnly],
   )
 
   /** 删除方案 */
   const handleDeletePlan = useCallback((id: string) => {
+    if (demoReadOnly) return
     setPlans((prev) => prev.filter((p) => p.id !== id))
-  }, [])
+  }, [demoReadOnly])
 
   // ---- 干员协同关系 ----
   /** 关系编辑模式的第一名干员（null = 等待选择）。 */
@@ -2530,7 +2949,7 @@ export default function App() {
   }, [activeModeMap, handleSelectModeStage, mapId, stages])
 
   return (
-    <div className={`app platform-${device.platform} ${device.mobileLayout ? 'mobile-layout' : 'desktop-layout'} ${ui.paletteOpen ? 'left-panel-open' : 'left-panel-closed'} ${isCinematicMapOnly ? 'cinematic-map-only' : ''} ${isCinematicLayerTour ? 'cinematic-layer-tour' : ''} ${isCinematicBattleCompare ? `cinematic-battle-${cinematicDemoStage?.toLowerCase()}` : ''} ${isCinematicC1Highlight ? `cinematic-c1-${cinematicDemoStage?.toLowerCase()}` : ''}`} style={{ '--left-panel-width': `${ui.leftPanelWidth}px` } as CSSProperties}>
+    <div className={`app platform-${device.platform} ${device.mobileLayout ? 'mobile-layout' : 'desktop-layout'} ${ui.paletteOpen ? 'left-panel-open' : 'left-panel-closed'} ${isCinematicMapOnly ? 'cinematic-map-only' : ''} ${isCinematicLayerTour ? 'cinematic-layer-tour' : ''} ${isCinematicBattleCompare ? `cinematic-battle-${cinematicDemoStage?.toLowerCase()}` : ''} ${isCinematicC1Highlight ? `cinematic-c1-${cinematicDemoStage?.toLowerCase()}` : ''} ${platform.kind === 'android' && splashDone ? 'app-fade-in' : ''}`} style={{ '--left-panel-width': `${ui.leftPanelWidth}px` } as CSSProperties}>
       <Toolbar
         mapId={mapId}
         onMapId={setMapId}
@@ -2549,22 +2968,49 @@ export default function App() {
         view={view}
         onView={setView}
         tool={tool}
-        onTool={setTool}
+        onTool={handleToolSelect}
         draw={ui.draw}
         onDrawChange={(draw) => setUi((u) => ({ ...u, draw }))}
         dirty={tool !== 'pan'}
-        canUndo={undoCount > 0}
+        canUndo={!demoReadOnly && undoCount > 0}
         onUndo={handleUndo}
-        canRedo={redoCount > 0}
+        canRedo={!demoReadOnly && redoCount > 0}
         onRedo={handleRedo}
-        canDeleteSel={deleteSelCount > 0}
+        canDeleteSel={!demoReadOnly && deleteSelCount > 0}
         onDeleteSelected={handleDeleteSelected}
-        onClearDraw={handleClearDraw}
-        onClearVehicles={handleClearVehicles}
-        onClearAll={handleClearAll}
+        onClearDraw={demoReadOnly ? () => {} : handleClearDraw}
+        onClearVehicles={demoReadOnly ? () => {} : handleClearVehicles}
+        onClearAll={demoReadOnly ? () => {} : handleClearAll}
+        readOnly={demoReadOnly}
         onOpenTactical={() => setTacticalOpen(true)}
+        onOpenLanCollab={() => setLanCollabOpen(true)}
+        lanCollabRunning={Boolean(lanSession?.running)}
+        splashSkippable={splashConfig.skippable}
+        onSplashSkippableChange={(v) => updateSplashConfig({ skippable: v })}
+        onPickSplashVideo={platform.kind === 'android' ? handlePickSplashVideo : undefined}
+        onResetSplashVideo={platform.kind === 'android' ? handleResetSplashVideo : undefined}
         cinematicModeSwitch={isCinematicModeSwitch}
       />
+      {lanVisitor ? (
+        lanBannerDismissed ? (
+          // 关闭后收缩为 toolbar 下方缓慢闪烁光条（演示=橙色 / 协作=绿色）
+          <div className={`lan-banner-bar ${lanVisitor.mode}`} aria-hidden="true" />
+        ) : (
+          <div className={`lan-demo-banner ${lanVisitor.mode}`}>
+            <span>{lanVisitor.mode === 'demo' ? '演示模式 · 仅观看' : '战术协作模式 · 可编辑'}</span>
+            <button
+              type="button"
+              className="lan-banner-close"
+              onClick={() => setLanBannerDismissed(true)}
+              title="收起为状态条"
+              aria-label="收起横幅"
+            >
+              ×
+            </button>
+          </div>
+        )
+      ) : null}
+      <LanFlashToast msg={lanFlash.msg} toastKey={lanFlash.key} />
       <div className="main">
         {isCinematicLayerTour && <div className="cinematic-stage-indicator"><small>当前阶段</small><b>S1 · 外围争夺</b></div>}
         <LeftPanel
@@ -2589,6 +3035,8 @@ export default function App() {
           customOwn={customOwn}
           onCustomOwnChange={setCustomOwn}
           onAddCustom={handleAddCustomVehicle}
+          // 演示模式访客只读：隐藏「兵棋推演」部署分组
+          hideWargame={demoReadOnly}
           // 兵棋推演
           view={view}
           operators={operators}
@@ -2623,7 +3071,7 @@ export default function App() {
           modeStageId={activeModeStageId}
           view={view}
           tool={tool}
-          onTool={setTool}
+          onTool={handleToolSelect}
           state={state}
           stages={stages}
           propsOverride={platformProps[mapId]}
@@ -2692,6 +3140,10 @@ export default function App() {
               }
             : null}
           cinematicBattleCompare={isCinematicBattleCompare ? cinematicDemoStage : null}
+          // 演示模式访客：跟随主机「同步视角」推送的地图视角
+          syncView={demoReadOnly ? lanSyncView : null}
+          // 移动端协作访客：启用触控桥接（移动端操作逻辑）
+          touchBridge={mobileVisitor}
         />
         <PointPanel
           stages={pointPanelStages}
@@ -2704,14 +3156,33 @@ export default function App() {
           onSelect={handleSelectPoint}
           onResetProgress={handleResetPointPanel}
         />
-        <DeployBar
-          mapId={mapId}
-          view={view}
-          target={deployTarget}
-          deployByStage={activeOfficialModeMap?.deploy}
-          onClose={() => setDeployTarget(null)}
-          onDeploy={handleDeployVehicle}
-        />
+        {/* 演示模式访客只读：不渲染载具部署栏 */}
+        {demoReadOnly ? null : (
+          <DeployBar
+            mapId={mapId}
+            view={view}
+            target={deployTarget}
+            deployByStage={activeOfficialModeMap?.deploy}
+            onClose={() => setDeployTarget(null)}
+            onDeploy={handleDeployVehicle}
+          />
+        )}
+        {/* 主机（演示模式）：地图右下角「同步视角」开关，长按查看使用说明 */}
+        {platform.kind === 'android' && lanSession?.running && lanSession.mode === 'demo' ? (
+          <button
+            type="button"
+            className={`lan-view-sync-btn ${lanViewSyncOn ? 'on' : ''}`}
+            onPointerDown={handleSyncBtnPressStart}
+            onPointerUp={handleSyncBtnPressEnd}
+            onPointerLeave={handleSyncBtnPressEnd}
+            onClick={handleSyncBtnClick}
+            title="同步视角（长按查看说明）"
+          >
+            同步视角 · {lanViewSyncOn ? '开' : '关'}
+          </button>
+        ) : null}
+        {/* 访客（演示模式）：视角跟随状态标（锁定不可点击） */}
+        {demoReadOnly && lanViewSyncActive ? <div className="lan-view-sync-badge">视角同步中</div> : null}
       </div>
 
       {/* 战术板弹窗（第二十一轮：导出 HTML + 方案管理） */}
@@ -2759,6 +3230,35 @@ export default function App() {
         onDeletePlan={handleDeletePlan}
         onClose={() => setTacticalOpen(false)}
       />
+
+      {/* 局域网协作弹窗（Android 主机端独占入口） */}
+      {platform.kind === 'android' ? (
+        <LanCollabModal
+          open={lanCollabOpen}
+          onClose={() => setLanCollabOpen(false)}
+          onSessionChange={setLanSession}
+        />
+      ) : null}
+
+      {/* 开屏视频文件选择（隐藏 input，由高阶菜单「选择视频…」触发） */}
+      {platform.kind === 'android' ? (
+        <input
+          ref={splashFileRef}
+          type="file"
+          accept="video/mp4"
+          hidden
+          onChange={handleSplashFileChange}
+        />
+      ) : null}
+
+      {/* 开屏视频覆盖层（Android 冷启动独占，播放结束/跳过后关闭） */}
+      {platform.kind === 'android' && splashPlaying ? (
+        <SplashVideoOverlay
+          videoUri={splashConfig.videoUri}
+          skippable={splashConfig.skippable}
+          onClose={handleSplashClose}
+        />
+      ) : null}
     </div>
   )
 }

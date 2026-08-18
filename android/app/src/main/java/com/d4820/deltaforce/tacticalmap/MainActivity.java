@@ -17,7 +17,10 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        registerPlugin(LanServerPlugin.class);
         super.onCreate(savedInstanceState);
+        // 开屏视频带音自动播放（无需用户手势）
+        getBridge().getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
         enableDisplayCutoutLayout();
         applyWindowBackgrounds();
         installSafeAreaBridge();

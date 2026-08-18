@@ -80,6 +80,8 @@ interface DrawBarProps {
   onRedo: () => void
   canDeleteSel: boolean
   onDeleteSelected: () => void
+  /** 演示模式访客只读：仅保留查看工具，其余按钮全部禁用 */
+  readOnly?: boolean
 }
 
 const isShapeTool = (tool: ToolMode) =>
@@ -191,6 +193,7 @@ export default function DrawBar({
   onRedo,
   canDeleteSel,
   onDeleteSelected,
+  readOnly = false,
 }: DrawBarProps) {
   // 当前样式气泡挂载在哪个工具下方（形状类工具点击时打开）
   const [styleFor, setStyleFor] = useState<ToolMode | null>(null)
@@ -422,11 +425,12 @@ export default function DrawBar({
   return (
     <div className="toolbar-draw">
       <div className="toolbar-draw-scroll" aria-label="绘制工具栏" onWheel={scrollToolsWithWheel}>
-        {/* 工具选择 */}
+        {/* 工具选择（只读访客仅保留查看） */}
         {DRAW_TOOLS.map((t) => (
           <ToolButton
             key={t.mode}
             onClick={() => handleTool(t.mode)}
+            disabled={readOnly && t.mode !== 'pan'}
             title={t.label}
             hint={TOOL_HINTS[t.mode]}
             active={tool === t.mode}
@@ -439,26 +443,26 @@ export default function DrawBar({
         <span className="toolbar-draw-divider" />
 
         {/* 撤回/恢复/删除选中 */}
-        <ToolButton onClick={onUndo} disabled={!canUndo} title="撤回上一步操作（含载具）">
+        <ToolButton onClick={onUndo} disabled={readOnly || !canUndo} title="撤回上一步操作（含载具）">
           <i className="fa-solid fa-rotate-left" aria-hidden="true" />
         </ToolButton>
-        <ToolButton onClick={onRedo} disabled={!canRedo} title="恢复被撤回的操作">
+        <ToolButton onClick={onRedo} disabled={readOnly || !canRedo} title="恢复被撤回的操作">
           <i className="fa-solid fa-rotate-right" aria-hidden="true" />
         </ToolButton>
-        <ToolButton onClick={onDeleteSelected} disabled={!canDeleteSel} title="删除选中的图形/载具">
+        <ToolButton onClick={onDeleteSelected} disabled={readOnly || !canDeleteSel} title="删除选中的图形/载具">
           <i className="fa-solid fa-trash" aria-hidden="true" />
         </ToolButton>
 
         <span className="toolbar-draw-divider" />
 
         {/* 清除类操作 */}
-        <ToolButton onClick={onClearVehicles} title="一键消除所有载具部署图标">
+        <ToolButton onClick={onClearVehicles} disabled={readOnly} title="一键消除所有载具部署图标">
           <i className="fa-solid fa-truck-fast" aria-hidden="true" />
         </ToolButton>
-        <ToolButton onClick={onClearDraw} title="清空本层绘制">
+        <ToolButton onClick={onClearDraw} disabled={readOnly} title="清空本层绘制">
           <i className="fa-solid fa-broom" aria-hidden="true" />
         </ToolButton>
-        <ToolButton onClick={onClearAll} danger title="一键清空本地图所有画笔和载具">
+        <ToolButton onClick={onClearAll} disabled={readOnly} danger title="一键清空本地图所有画笔和载具">
           <i className="fa-solid fa-trash-can" aria-hidden="true" />
         </ToolButton>
 

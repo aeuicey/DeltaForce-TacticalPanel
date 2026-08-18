@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import type { DrawSettings, Side, ToolMode } from '../types'
 import DrawBar from './DrawBar'
-import { IconFullscreen } from './icons'
+import { Checkbox, IconCollab, IconFullscreen, IconVideo } from './icons'
 import ShortcutHelp from './ShortcutHelp'
 import { platform } from '../platform'
 import type { GameDataPlatform } from '../config/gameDataPlatform'
 
-type ToolbarMenu = 'map' | 'mode' | 'device'
+type ToolbarMenu = 'map' | 'mode' | 'device' | 'advanced'
 
 interface ToolbarSelectOption {
   value: string
@@ -141,6 +141,19 @@ interface ToolbarProps {
   onClearAll: () => void
   /** 打开战术板弹窗（导出 HTML / 方案管理） */
   onOpenTactical: () => void
+  /** 打开局域网协作弹窗（仅 Android 主机端渲染按钮） */
+  onOpenLanCollab?: () => void
+  /** 局域网协作服务器运行中（按钮高亮态） */
+  lanCollabRunning?: boolean
+  /** 开屏视频「可跳过」开关（仅 Android 渲染入口） */
+  splashSkippable?: boolean
+  onSplashSkippableChange?: (v: boolean) => void
+  /** 选择自定义开屏视频（仅 Android 渲染入口） */
+  onPickSplashVideo?: () => void
+  /** 恢复默认开屏视频（仅 Android 渲染入口） */
+  onResetSplashVideo?: () => void
+  /** 演示模式访客只读：禁用绘制/编辑按钮（仅保留查看） */
+  readOnly?: boolean
   cinematicModeSwitch?: boolean
 }
 
@@ -182,9 +195,18 @@ export default function Toolbar({
   onClearVehicles,
   onClearAll,
   onOpenTactical,
+  onOpenLanCollab,
+  lanCollabRunning = false,
+  splashSkippable = true,
+  onSplashSkippableChange,
+  onPickSplashVideo,
+  onResetSplashVideo,
+  readOnly = false,
   cinematicModeSwitch = false,
 }: ToolbarProps) {
   const [openMenu, setOpenMenu] = useState<ToolbarMenu | null>(null)
+  // 「开屏视频」三级子菜单展开态（hover 展开、点击切换，兼容触摸）
+  const [splashSubOpen, setSplashSubOpen] = useState(false)
   const currentMap = MAPS.find((m) => m.id === mapId) ?? MAPS[0]
 
   useEffect(() => {
@@ -215,7 +237,7 @@ export default function Toolbar({
     if (!openMenu) return
     const onDocDown = (e: PointerEvent) => {
       const t = e.target as HTMLElement
-      if (!t.closest('.topbar-select')) setOpenMenu(null)
+      if (!t.closest('.topbar-select') && !t.closest('.advanced-menu-wrap')) setOpenMenu(null)
     }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpenMenu(null)
@@ -226,6 +248,11 @@ export default function Toolbar({
       document.removeEventListener('pointerdown', onDocDown)
       document.removeEventListener('keydown', onKeyDown)
     }
+  }, [openMenu])
+
+  // 高阶菜单收起时同步收起「开屏视频」三级子菜单
+  useEffect(() => {
+    if (openMenu !== 'advanced') setSplashSubOpen(false)
   }, [openMenu])
 
   return (
@@ -270,6 +297,7 @@ export default function Toolbar({
         onClearDraw={onClearDraw}
         onClearVehicles={onClearVehicles}
         onClearAll={onClearAll}
+        readOnly={readOnly}
       />
 
       {/* 右侧模式切换区 */}
@@ -329,6 +357,90 @@ export default function Toolbar({
           <span className="tactical-label-long">战术板</span>
           <span className="tactical-label-short" aria-hidden="true">板</span>
         </button>
+        {/* 高阶菜单（二级目录：地图协作 / 开屏视频，Android 主机端独占） */}
+        {platform.kind === 'android' && (onOpenLanCollab || onPickSplashVideo) ? (
+          <div className={`advanced-menu-wrap ${openMenu === 'advanced' ? 'open' : ''}`}>
+            <button
+              className={`tactical-btn advanced-btn ${lanCollabRunning ? 'running' : ''}`}
+              onClick={() => setOpenMenu(openMenu === 'advanced' ? null : 'advanced')}
+              aria-haspopup="menu"
+              aria-expanded={openMenu === 'advanced'}
+              title="高阶菜单"
+            >
+              <span className="tactical-label-long">高阶菜单</span>
+              <span className="tactical-label-short" aria-hidden="true">阶</span>
+              <i className="fa-solid fa-chevron-down" aria-hidden="true" />
+            </button>
+            {openMenu === 'advanced' ? (
+              <div className="advanced-menu" role="menu">
+                {onOpenLanCollab ? (
+                  <button
+                    role="menuitem"
+                    className={`map-select-item ${lanCollabRunning ? 'active' : ''}`}
+                    onClick={() => {
+                      onOpenLanCollab()
+                      setOpenMenu(null)
+                    }}
+                  >
+                    <IconCollab size={14} />
+                    <span>地图协作{lanCollabRunning ? '（运行中）' : ''}</span>
+                  </button>
+                ) : null}
+                {onPickSplashVideo ? (
+                  <div
+                    className={`advanced-submenu-wrap ${splashSubOpen ? 'open' : ''}`}
+                    onMouseEnter={() => setSplashSubOpen(true)}
+                    onMouseLeave={() => setSplashSubOpen(false)}
+                  >
+                    <button
+                      role="menuitem"
+                      className={`map-select-item ${splashSubOpen ? 'active' : ''}`}
+                      aria-haspopup="menu"
+                      aria-expanded={splashSubOpen}
+                      onClick={() => setSplashSubOpen((v) => !v)}
+                    >
+                      <IconVideo size={14} />
+                      <span>开屏视频</span>
+                      <i className="fa-solid fa-chevron-left submenu-caret" aria-hidden="true" />
+                    </button>
+                    {splashSubOpen ? (
+                      <div className="advanced-submenu" role="menu">
+                        <button
+                          role="menuitem"
+                          className="map-select-item"
+                          onClick={() => {
+                            onPickSplashVideo()
+                            setSplashSubOpen(false)
+                            setOpenMenu(null)
+                          }}
+                        >
+                          <span>选择视频…</span>
+                        </button>
+                        <Checkbox
+                          className="splash-skip-checkbox"
+                          checked={splashSkippable}
+                          onChange={(v) => onSplashSkippableChange?.(v)}
+                          label="可跳过"
+                        />
+                        <button
+                          role="menuitem"
+                          className="map-select-item"
+                          onClick={() => {
+                            onResetSplashVideo?.()
+                            setSplashSubOpen(false)
+                            setOpenMenu(null)
+                          }}
+                        >
+                          <span>恢复默认视频</span>
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </header>
   )

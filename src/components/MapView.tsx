@@ -144,6 +144,10 @@ interface MapViewProps {
   onDeleteRoute: (uid: string) => void
   cinematicInitialView?: { center: [number, number]; zoom: number } | null
   cinematicBattleCompare?: string | null
+  /** 演示模式访客：跟随主机视角（seq 去重，仅新视角触发 setView） */
+  syncView?: { center: [number, number]; zoom: number; seq: number } | null
+  /** 移动端协作访客：启用触控桥接（移动端操作逻辑） */
+  touchBridge?: boolean
 }
 
 function CinematicBattleHighlights({ stage }: { stage: string }) {
@@ -182,15 +186,24 @@ function MapSync({
   initialView,
   minZoom,
   defaultZoom,
+  syncView,
 }: {
   config: MapConfig
   onReady: (map: L.Map) => void
   initialView?: { center: [number, number]; zoom: number } | null
   minZoom: number
   defaultZoom: number
+  syncView?: { center: [number, number]; zoom: number; seq: number } | null
 }) {
   const map = useMap()
   const appliedViewRef = useRef('')
+  const appliedSyncSeqRef = useRef(-1)
+  // 演示模式访客：主机推送的视角按 seq 去重后跟随
+  useEffect(() => {
+    if (!syncView || syncView.seq === appliedSyncSeqRef.current) return
+    appliedSyncSeqRef.current = syncView.seq
+    map.setView(syncView.center, syncView.zoom, { animate: false })
+  }, [map, syncView])
   useEffect(() => {
     const center = initialView?.center ?? config.initCenter
     const zoom = initialView?.zoom ?? defaultZoom
@@ -400,6 +413,8 @@ export default function MapView({
   onDeleteRoute,
   cinematicInitialView,
   cinematicBattleCompare,
+  syncView,
+  touchBridge = false,
 }: MapViewProps) {
   const bounds = useMemo(() => mapBounds(config), [config])
   // A phone viewport needs one extra zoom level to show roughly twice as much
@@ -705,6 +720,7 @@ export default function MapView({
           initialView={cinematicInitialView}
           minZoom={minZoom}
           defaultZoom={defaultZoom}
+          syncView={syncView}
         />
         <MapResizeSync />
         {cinematicBattleCompare ? <CinematicBattleHighlights stage={cinematicBattleCompare} /> : null}
@@ -895,6 +911,7 @@ export default function MapView({
           teamPosRef={teamPosRef}
           onMoveTeams={onMoveTeamMarkers}
           onDeleteTeams={onDeleteTeamMarkers}
+          touchBridge={touchBridge}
         />
       </MapContainer>
 

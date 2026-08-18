@@ -5,6 +5,8 @@ export interface DeviceType {
   platform: typeof platform.kind
   mobileLayout: boolean
   coarsePointer: boolean
+  /** 竖屏方向（访客端横屏体验更佳，用于竖屏提醒） */
+  portrait: boolean
 }
 
 function readDeviceType(): DeviceType {
@@ -14,6 +16,7 @@ function readDeviceType(): DeviceType {
     platform: platform.kind,
     mobileLayout: platform.kind === 'android' || (coarsePointer && narrowScreen),
     coarsePointer,
+    portrait: window.matchMedia('(orientation: portrait)').matches,
   }
 }
 
@@ -21,7 +24,11 @@ export function useDeviceType(): DeviceType {
   const [device, setDevice] = useState(readDeviceType)
 
   useEffect(() => {
-    const queries = [window.matchMedia('(pointer: coarse)'), window.matchMedia('(max-width: 900px)')]
+    const queries = [
+      window.matchMedia('(pointer: coarse)'),
+      window.matchMedia('(max-width: 900px)'),
+      window.matchMedia('(orientation: portrait)'),
+    ]
     const update = () => setDevice(readDeviceType())
     queries.forEach((query) => query.addEventListener('change', update))
     window.addEventListener('orientationchange', update)
