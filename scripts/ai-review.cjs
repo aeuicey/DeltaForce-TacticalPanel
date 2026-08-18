@@ -1,23 +1,25 @@
 // AI 代码质量审查（GitHub Actions 专用）
-// 通过 GitHub Models 免费推理 API（GITHUB_TOKEN 鉴权，无需外部密钥）对 diff 做审查，
-// 结果以评论形式回写到 PR 或 commit。
+// 通过 DeepSeek API（OpenAI 兼容协议）对 diff 做审查，结果以评论形式回写到 PR 或 commit。
 //
 // 用法（环境变量驱动）：
-//   GITHUB_TOKEN      - Actions 注入的令牌（需 models: read + pull-requests: write）
+//   DEEPSEEK_API_KEY  - DeepSeek API Key（仓库 Secrets 注入）
 //   REPO              - owner/repo
 //   PR_NUMBER         - PR 编号（评论到 PR）；与 COMMIT_SHA 二选一
 //   COMMIT_SHA        - commit SHA（评论到 commit）
 //   DIFF_FILE         - diff 文本文件路径
-//   MODEL             - 可选，默认 openai/gpt-4o-mini
+//   MODEL             - 可选，默认 deepseek-chat
+//   API_BASE          - 可选，默认 https://api.deepseek.com/chat/completions
 
 const fs = require('node:fs')
 
-const token = process.env.GITHUB_TOKEN
+const apiKey = process.env.DEEPSEEK_API_KEY
+const githubToken = process.env.GITHUB_TOKEN
 const repo = process.env.REPO
 const prNumber = process.env.PR_NUMBER
 const commitSha = process.env.COMMIT_SHA
 const diffFile = process.env.DIFF_FILE || '/tmp/ai-review.diff'
-const model = process.env.MODEL || 'openai/gpt-4o-mini'
+const model = process.env.MODEL || 'deepseek-chat'
+const apiBase = process.env.API_BASE || 'https://api.deepseek.com/chat/completions'
 
 const MAX_DIFF_CHARS = 24000
 
@@ -25,7 +27,7 @@ async function api(url, options = {}) {
   const res = await fetch(url, {
     ...options,
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${githubToken}`,
       Accept: 'application/vnd.github+json',
       'Content-Type': 'application/json',
       ...(options.headers ?? {}),
@@ -36,7 +38,8 @@ async function api(url, options = {}) {
 }
 
 async function main() {
-  if (!token || !repo) throw new Error('缺少 GITHUB_TOKEN 或 REPO')
+  if (!apiKey) throw new Error('缺少 DEEPSEEK_API_KEY（请在仓库 Settings → Secrets 中添加）')
+  if (!githubToken || !repo) throw new Error('缺少 GITHUB_TOKEN 或 REPO')
   let diff = fs.existsSync(diffFile) ? fs.readFileSync(diffFile, 'utf8') : ''
   if (!diff.trim()) {
     console.log('diff 为空，跳过审查')
@@ -62,8 +65,12 @@ async function main() {
     '```',
   ].join('\n')
 
-  const completion = await api('https://models.github.ai/inference/chat/completions', {
+  const res = await fetch(apiBase, {
     method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({
       model,
       messages: [
@@ -74,6 +81,8 @@ async function main() {
       max_tokens: 1500,
     }),
   })
+  if (!res.ok) throw new Error(`DeepSeek API → ${res.status}: ${(await res.text()).slice(0, 300)}`)
+  const completion = await res.json()
   const review = completion.choices?.[0]?.message?.content?.trim() || '（模型未返回内容）'
   const body = `## 🤖 AI 代码审查（${model}）\n\n${review}\n\n---\n*由 GitHub Actions 自动生成，仅供参考。*`
 

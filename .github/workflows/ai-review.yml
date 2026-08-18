@@ -1,7 +1,7 @@
 name: AI Code Review
 
 # PR 打开/更新时审查 PR diff；push 到 main 时审查本次提交 diff
-# 使用 GitHub Models 免费推理 API，仅需 GITHUB_TOKEN，无需外部密钥
+# 使用 DeepSeek API（OpenAI 兼容协议），需在仓库 Secrets 配置 DEEPSEEK_API_KEY
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -11,7 +11,6 @@ on:
 permissions:
   contents: read
   pull-requests: write   # 评论 PR / commit
-  models: read           # GitHub Models 推理 API
 
 concurrency:
   group: ai-review-${{ github.event.pull_request.number || github.sha }}
@@ -38,6 +37,7 @@ jobs:
       - name: Run AI review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           COMMIT_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
