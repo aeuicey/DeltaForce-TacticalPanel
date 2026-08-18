@@ -9,8 +9,8 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
-  pull-requests: write   # 评论 PR / commit
+  contents: write        # commit 评论需要写权限（pull-requests: write 不覆盖 commit comments）
+  pull-requests: write   # 评论 PR
 
 concurrency:
   group: ai-review-${{ github.event.pull_request.number || github.sha }}
