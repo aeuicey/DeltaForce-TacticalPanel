@@ -46,20 +46,22 @@
 - 新增开屏视频（Android 独占，支持自定义 mp4 与可跳过设置，默认视频内置）。
 - 新增高阶菜单（地图协作、开屏视频入口）。
 - 应用版本号修正为 0.0.2-indoor（安装信息可见，可覆盖升级）。
-
+<img width="100%" alt="c9e1235062635d6841ad8515d58ae741" src="https://github.com/user-attachments/assets/22b81a8c-efcb-44bd-a204-7fcd4b9309fb" />
+<img width="100%" alt="Screenshot_20260819_040516" src="https://github.com/user-attachments/assets/6682a3ad-65ba-4b04-9b0e-fbce43c25e9e" />
 ### Web 端
 
 - 新增分享模式（Web 独占）：生成随机后缀分享链接，主机/访客昵称与人数统计、战术命名、实时同步、访客只读、主机离线即刻过期。
 - 分享需部署内置中继服务器（`npm run share:server` 或 Docker，见下文 Docker 部署）；GitHub Pages 上分享按钮置灰。
+<img width="1151" height="806" alt="image" src="https://github.com/user-attachments/assets/8c5108a1-e7d3-4c90-9244-3850588ccc6f" />
 
 ### 通用
 
 - 新增绘图组件锁定：锁定后防移动/编辑/擦除，套索圈选含锁定图形时整组保护并提示。
 - 支持鼠标中键拖动地图；修复选中框按钮缩放漂移、套索框缩放漂移、锁定图标尺寸不一致等问题。
 
-<img width="100%" alt="c9e1235062635d6841ad8515d58ae741" src="https://github.com/user-attachments/assets/22b81a8c-efcb-44bd-a204-7fcd4b9309fb" />
 
-<img width="100%" alt="Screenshot_20260819_040516" src="https://github.com/user-attachments/assets/6682a3ad-65ba-4b04-9b0e-fbce43c25e9e" />
+
+
 
 <details>
 <summary>0.0.1 更新摘要（点击展开）</summary>
