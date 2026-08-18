@@ -1530,10 +1530,13 @@ export default function App() {
               const data = (await viewRes.json()) as { view?: unknown }
               if (typeof data.view === 'string') {
                 try {
-                  const parsed = JSON.parse(data.view) as { centerLat?: unknown; centerLng?: unknown; zoom?: unknown; seq?: unknown }
-                  if (!cancelled && typeof parsed.centerLat === 'number' && typeof parsed.centerLng === 'number' && typeof parsed.zoom === 'number') {
+                  const parsed = JSON.parse(data.view) as { lat?: unknown; lng?: unknown; centerLat?: unknown; centerLng?: unknown; zoom?: unknown; seq?: unknown }
+                  // 原生插件存储字段为 lat/lng（centerLat/centerLng 为兼容兜底）
+                  const lat = typeof parsed.lat === 'number' ? parsed.lat : parsed.centerLat
+                  const lng = typeof parsed.lng === 'number' ? parsed.lng : parsed.centerLng
+                  if (!cancelled && typeof lat === 'number' && typeof lng === 'number' && typeof parsed.zoom === 'number') {
                     setLanSyncView({
-                      center: [parsed.centerLat, parsed.centerLng],
+                      center: [lat, lng],
                       zoom: parsed.zoom,
                       seq: typeof parsed.seq === 'number' ? parsed.seq : viewRev,
                     })

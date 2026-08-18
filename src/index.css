@@ -6154,12 +6154,12 @@ body {
   50% { opacity: 1; }
 }
 
-/* 主机端（演示模式）：地图右下角「同步视角」开关 */
+/* 主机端（演示模式）：地图右下角「同步视角」开关（z-index 低于左右侧栏 100，避免挡住展开的面板） */
 .lan-view-sync-btn {
   position: absolute;
   right: 16px;
   bottom: 24px;
-  z-index: 1200;
+  z-index: 90;
   padding: 8px 14px;
   border: 1px solid var(--line-1, #3a4147);
   border-radius: 4px;
@@ -6183,7 +6183,7 @@ body {
   position: absolute;
   right: 16px;
   bottom: 24px;
-  z-index: 1200;
+  z-index: 90;
   padding: 6px 12px;
   border-radius: 4px;
   background: rgba(14, 17, 18, 0.6);
