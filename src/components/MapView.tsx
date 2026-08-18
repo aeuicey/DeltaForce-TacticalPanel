@@ -198,11 +198,11 @@ function MapSync({
   const map = useMap()
   const appliedViewRef = useRef('')
   const appliedSyncSeqRef = useRef(-1)
-  // 演示模式访客：主机推送的视角按 seq 去重后跟随
+  // 演示模式访客：主机推送的视角按 seq 去重后跟随（flyTo 平滑移动/缩放，观看更舒适）
   useEffect(() => {
     if (!syncView || syncView.seq === appliedSyncSeqRef.current) return
     appliedSyncSeqRef.current = syncView.seq
-    map.setView(syncView.center, syncView.zoom, { animate: false })
+    map.flyTo(syncView.center, syncView.zoom, { duration: 0.8, easeLinearity: 0.5 })
   }, [map, syncView])
   useEffect(() => {
     const center = initialView?.center ?? config.initCenter
