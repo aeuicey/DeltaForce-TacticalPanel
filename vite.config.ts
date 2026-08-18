@@ -7,6 +7,8 @@ const demoEntry = 'demo/v0.0.1/app/cinematic-demo.html'
 
 export default defineConfig({
   plugins: [react()],
+  // GitHub Pages 部署在 /<仓库名>/ 子路径下，CI 通过 VITE_BASE 注入；本地/Electron/Android 保持 '/'
+  base: process.env.VITE_BASE ?? '/',
   build: {
     rollupOptions: {
       input: {

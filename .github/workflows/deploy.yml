@@ -1,0 +1,96 @@
+name: Deploy Pages & Android Release
+
+# main 分支有新提交时：构建 Web 版部署到 GitHub Pages（Demo），并打包 Android APK 发布 Release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write      # 创建 Release 并上传 APK
+  pages: write         # 部署 GitHub Pages
+  id-token: write      # Pages 部署身份验证
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VERSION: 0.0.1
+
+jobs:
+  # ---- Web Demo → GitHub Pages ----
+  pages:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      # Pages 部署在 /<仓库名>/ 子路径，Vite base 与运行时绝对路径都需适配
+      - name: Build (Pages base)
+        run: npm run build
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+
+      - name: Fix runtime absolute paths for subpath
+        run: node scripts/fix-pages-paths.cjs /${{ github.event.repository.name }}
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  # ---- Android APK → Release ----
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - run: npm ci --no-audit --no-fund
+
+      # 生成 Web 资源并同步进 Android 工程（插件注册已在仓库内，sync 幂等）
+      - run: npm run build && npx cap sync android
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --console=plain
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk deltaforce-tactical-map-${{ env.VERSION }}-android-debug.apk
+
+      - name: Create Release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v${{ env.VERSION }}-b${{ github.run_number }}
+          name: Android v${{ env.VERSION }} (build ${{ github.run_number }})
+          body: |
+            由 GitHub Actions 自动构建（commit ${{ github.sha }}）。
+            Debug 包，仅供测试安装。
+          files: deltaforce-tactical-map-${{ env.VERSION }}-android-debug.apk
