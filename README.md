@@ -38,13 +38,25 @@
 
 ## 0.0.2-indoor 更新摘要
 
-- 新增局域网地图协作（Android 主机一键开服，访客浏览器直达战术面板）：演示模式（只读跟随）与战术协作模式（双向同步）。
-- 演示模式全权限锁定、横幅可关闭为状态光条、主机实时切换模式并广播、同步视角（访客跟随主机地图视角）。
+### Android 端
+
+- 新增局域网地图协作（Android 独占，主机一键开服，访客浏览器直达战术面板）：演示模式（只读跟随）与战术协作模式（双向同步）。
+- 演示模式全权限锁定、横幅可关闭为状态光条、主机实时切换模式并广播、同步视角（访客平滑跟随主机地图视角）。
 - 移动端访客自动切换触控操作逻辑并提示，竖屏访问给出横屏建议。
-- 新增开屏视频（Android 独占，支持自定义 mp4 与可跳过设置）。
-- 新增绘图组件锁定：锁定后防移动/编辑/擦除，套索圈选含锁定图形时整组保护并提示。
+- 新增开屏视频（Android 独占，支持自定义 mp4 与可跳过设置，默认视频内置）。
 - 新增高阶菜单（地图协作、开屏视频入口）。
-- 支持鼠标中键拖动地图；修复选中框按钮缩放漂移、套索框缩放漂移等问题。
+- 应用版本号修正为 0.0.2-indoor（安装信息可见，可覆盖升级）。
+
+### Web 端
+
+- 新增分享模式（Web 独占）：生成随机后缀分享链接，主机/访客昵称与人数统计、战术命名、实时同步、访客只读、主机离线即刻过期。
+- 分享需部署内置中继服务器（`npm run share:server` 或 Docker，见下文 Docker 部署）；GitHub Pages 上分享按钮置灰。
+
+### 通用
+
+- 新增绘图组件锁定：锁定后防移动/编辑/擦除，套索圈选含锁定图形时整组保护并提示。
+- 支持鼠标中键拖动地图；修复选中框按钮缩放漂移、套索框缩放漂移、锁定图标尺寸不一致等问题。
+
 <img width="100%" alt="c9e1235062635d6841ad8515d58ae741" src="https://github.com/user-attachments/assets/22b81a8c-efcb-44bd-a204-7fcd4b9309fb" />
 
 <img width="100%" alt="Screenshot_20260819_040516" src="https://github.com/user-attachments/assets/6682a3ad-65ba-4b04-9b0e-fbce43c25e9e" />
@@ -153,18 +165,18 @@ main 分支每次有新提交，GitHub Actions 会自动完成两件事：
 
 ## Docker 部署
 
-仓库内置 Docker 打包方案（`Docker/` 目录），适合自托管部署：
+仓库内置 Docker 打包方案（`Docker/` 目录），适合自托管部署（含分享模式中继）：
 
 ```bash
 # 项目根目录构建镜像
-docker build -f Docker/Dockerfile -t deltaforce-tactical-map:0.0.1 .
+docker build -f Docker/Dockerfile -t deltaforce-tactical-map:0.0.2-indoor .
 
 # 运行（端口按需修改）
-docker run -d -p 8080:80 --name deltaforce-tactical-map deltaforce-tactical-map:0.0.1
+docker run -d -p 8080:8781 --name deltaforce-tactical-map deltaforce-tactical-map:0.0.2-indoor
 # 访问 http://localhost:8080/
 ```
 
-也可以进入 `Docker/` 目录使用 `docker compose up -d --build`。镜像为多阶段构建（Node 构建 + Nginx 托管），纯静态站点无后端依赖。详细说明见 [Docker/README.md](./Docker/README.md)。
+也可以进入 `Docker/` 目录使用 `docker compose up -d --build`。镜像为多阶段构建（Node 构建 + Node 中继服务器托管），静态站点与分享模式 API（`/api/share`，端口 8781）一体提供。详细说明见 [Docker/README.md](./Docker/README.md)。
 
 ## 项目结构
 
