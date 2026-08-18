@@ -45,6 +45,9 @@
 - 新增绘图组件锁定：锁定后防移动/编辑/擦除，套索圈选含锁定图形时整组保护并提示。
 - 新增高阶菜单（地图协作、开屏视频入口）。
 - 支持鼠标中键拖动地图；修复选中框按钮缩放漂移、套索框缩放漂移等问题。
+<img width="1902" height="1160" alt="c9e1235062635d6841ad8515d58ae741" src="https://github.com/user-attachments/assets/22b81a8c-efcb-44bd-a204-7fcd4b9309fb" />
+
+<img width="1377" height="1017" alt="Screenshot_20260819_040516" src="https://github.com/user-attachments/assets/6682a3ad-65ba-4b04-9b0e-fbce43c25e9e" />
 
 <details>
 <summary>0.0.1 更新摘要（点击展开）</summary>
