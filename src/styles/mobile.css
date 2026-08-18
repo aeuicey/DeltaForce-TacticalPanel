@@ -176,11 +176,20 @@
 }
 
 .mobile-layout .edit-style-trigger,
-.mobile-layout .edit-delete-trigger {
+.mobile-layout .edit-delete-trigger,
+.mobile-layout .edit-lock-trigger,
+.mobile-layout .edit-unlock-trigger {
   width: 36px;
   height: 34px;
   font-size: 14px;
   touch-action: manipulation;
+}
+
+/* 锁定/解锁为内联 SVG（非字体图标），移动端同步放大到与 FA 图标视觉一致 */
+.mobile-layout .edit-lock-trigger svg,
+.mobile-layout .edit-unlock-trigger svg {
+  width: 14px;
+  height: 17px;
 }
 
 .mobile-layout .text-editor {
