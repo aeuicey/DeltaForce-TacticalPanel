@@ -48,6 +48,7 @@
 - 应用版本号修正为 0.0.2-indoor（安装信息可见，可覆盖升级）。
 <img width="100%" alt="c9e1235062635d6841ad8515d58ae741" src="https://github.com/user-attachments/assets/22b81a8c-efcb-44bd-a204-7fcd4b9309fb" />
 <img width="100%" alt="Screenshot_20260819_040516" src="https://github.com/user-attachments/assets/6682a3ad-65ba-4b04-9b0e-fbce43c25e9e" />
+
 ### Web 端
 
 - 新增分享模式（Web 独占）：生成随机后缀分享链接，主机/访客昵称与人数统计、战术命名、实时同步、访客只读、主机离线即刻过期。
