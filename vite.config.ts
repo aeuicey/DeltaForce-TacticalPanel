@@ -21,5 +21,9 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    proxy: {
+      // 网页端分享模式：开发时将分享中继 API 代理到本地零依赖中继服务器（npm run share:server）
+      '/api/share': 'http://localhost:8781',
+    },
   },
 })

@@ -185,13 +185,6 @@
   touch-action: manipulation;
 }
 
-/* 锁定/解锁为内联 SVG（非字体图标），移动端同步放大到与 FA 图标视觉一致 */
-.mobile-layout .edit-lock-trigger svg,
-.mobile-layout .edit-unlock-trigger svg {
-  width: 14px;
-  height: 17px;
-}
-
 .mobile-layout .text-editor {
   width: min(380px, calc(100% - 16px));
 }

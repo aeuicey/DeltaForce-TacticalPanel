@@ -5086,7 +5086,7 @@ body {
 
 .edit-style-trigger {
   width: 30px;
-  height: 26px;
+  height: 26px;height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5107,7 +5107,7 @@ body {
 
 .edit-delete-trigger {
   width: 30px;
-  height: 26px;
+  height: 26px;height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5135,7 +5135,7 @@ body {
 .edit-lock-trigger,
 .edit-unlock-trigger {
   width: 30px;
-  height: 26px;
+  height: 26px;height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5171,6 +5171,8 @@ body {
 .edit-lock-trigger svg,
 .edit-unlock-trigger svg {
   display: block;
+  height: 1em;
+  width: auto;
 }
 
 /* 绘制操作轻量提示（锁定图形被删除/擦除时）：底部居中，2 秒自动消失 */
@@ -6901,3 +6903,109 @@ body {
 }
 .app-touch-demo-point.contact::after { animation: app-touch-contact .48s ease-out both; }
 @keyframes app-touch-contact { 0% { opacity:0; scale:.45 } 35% { opacity:1; scale:1 } 100% { opacity:0; scale:1.85 } }
+
+/* ---- 网页端分享模式（Toolbar 分享按钮 + ShareModal） ---- */
+.toolbar .tactical-btn.share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar .tactical-btn.share-btn svg {
+  flex-shrink: 0;
+}
+
+.toolbar .tactical-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 覆盖 .toolbar .tactical-btn:hover，置灰态不反色 */
+.toolbar .tactical-btn:hover:not(:disabled) {
+  background: var(--gold);
+  color: var(--on-accent);
+}
+
+/* 分享运行中高亮（做法同高阶菜单 running 态） */
+.toolbar .tactical-btn.share-btn.running {
+  background: var(--gold);
+  color: var(--on-accent);
+}
+
+.share-modal .tb-body {
+  gap: 12px;
+}
+
+/* 分享后缀大字（做法同 .lan-address：点按全选复制） */
+.share-suffix {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--gold);
+  text-align: center;
+  letter-spacing: 6px;
+  padding: 12px 8px;
+  border: 1px dashed var(--line-1);
+  border-radius: 4px;
+  background: rgba(255, 213, 74, 0.06);
+  user-select: all;
+}
+
+/* 完整分享链接（小号，全选复制） */
+.share-url {
+  font-size: 11px;
+  color: var(--tx-3);
+  text-align: center;
+  word-break: break-all;
+  user-select: all;
+}
+
+.share-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 2px;
+  letter-spacing: 1px;
+}
+
+.share-badge.host {
+  background: var(--gold);
+  color: var(--on-accent);
+}
+
+.share-badge.guest {
+  background: #389bff;
+  color: #fff;
+}
+
+.share-guest-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.share-guest-item {
+  font-size: 11px;
+  color: var(--tx-2);
+  background: var(--bg-btn);
+  border: 1px solid var(--line-1);
+  border-radius: 10px;
+  padding: 2px 10px;
+}
+
+/* 访客同步信息行（渲染时计算的静态文本，不自动刷新） */
+.share-sync-line {
+  font-size: 11px;
+  color: var(--tx-3);
+  line-height: 1.6;
+}
+
+.share-expired {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ff8a80;
+  text-align: center;
+  letter-spacing: 2px;
+  padding: 16px 0 4px;
+}

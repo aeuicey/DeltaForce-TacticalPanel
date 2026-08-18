@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import type { DrawSettings, Side, ToolMode } from '../types'
 import DrawBar from './DrawBar'
-import { Checkbox, IconCollab, IconFullscreen, IconVideo } from './icons'
+import { Checkbox, IconCollab, IconFullscreen, IconShare, IconVideo } from './icons'
 import ShortcutHelp from './ShortcutHelp'
 import { platform } from '../platform'
 import type { GameDataPlatform } from '../config/gameDataPlatform'
@@ -141,6 +141,12 @@ interface ToolbarProps {
   onClearAll: () => void
   /** 打开战术板弹窗（导出 HTML / 方案管理） */
   onOpenTactical: () => void
+  /** 打开网页端分享弹窗（仅 Web 且非局域网访客时渲染按钮） */
+  onOpenShare?: () => void
+  /** 分享主机运行中（按钮高亮态） */
+  shareRunning?: boolean
+  /** 分享中继服务器可用（false 时按钮置灰并提示部署） */
+  shareAvailable?: boolean
   /** 打开局域网协作弹窗（仅 Android 主机端渲染按钮） */
   onOpenLanCollab?: () => void
   /** 局域网协作服务器运行中（按钮高亮态） */
@@ -195,6 +201,9 @@ export default function Toolbar({
   onClearVehicles,
   onClearAll,
   onOpenTactical,
+  onOpenShare,
+  shareRunning = false,
+  shareAvailable = true,
   onOpenLanCollab,
   lanCollabRunning = false,
   splashSkippable = true,
@@ -357,6 +366,19 @@ export default function Toolbar({
           <span className="tactical-label-long">战术板</span>
           <span className="tactical-label-short" aria-hidden="true">板</span>
         </button>
+        {/* 网页端分享（Web 独占；中继不可用时置灰） */}
+        {platform.kind === 'web' && onOpenShare ? (
+          <button
+            className={`tactical-btn share-btn ${shareRunning ? 'running' : ''}`}
+            onClick={onOpenShare}
+            disabled={!shareAvailable}
+            title={shareAvailable ? '分享：生成链接，访客实时观看（只读）' : '需部署分享中继服务器（见 Docker 部署）'}
+          >
+            <IconShare size={13} />
+            <span className="tactical-label-long">分享</span>
+            <span className="tactical-label-short" aria-hidden="true">享</span>
+          </button>
+        ) : null}
         {/* 高阶菜单（二级目录：地图协作 / 开屏视频，Android 主机端独占） */}
         {platform.kind === 'android' && (onOpenLanCollab || onPickSplashVideo) ? (
           <div className={`advanced-menu-wrap ${openMenu === 'advanced' ? 'open' : ''}`}>

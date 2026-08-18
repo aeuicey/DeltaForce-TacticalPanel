@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "share:server": "node server/share-server.cjs",
     "electron:dev": "electron .",
     "build:win": "npm run build && electron-builder --win",
     "android:add": "cap add android",

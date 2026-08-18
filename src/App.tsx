@@ -58,6 +58,19 @@ import {
 } from './platform/lanServer'
 import type { PluginListenerHandle } from '@capacitor/core'
 import LanCollabModal from './components/LanCollabModal'
+import ShareModal, { ShareNicknameModal } from './components/ShareModal'
+import {
+  SHARE_NICKNAME_KEY,
+  closeShare,
+  closeShareBeacon,
+  createShareHost,
+  genShareSuffix,
+  getShareInfo,
+  openShareEvents,
+  probeShareServer,
+  pushShareState,
+  shareBeat,
+} from './platform/shareClient'
 import SplashVideoOverlay from './components/SplashVideoOverlay'
 import { useDeviceType } from './hooks/useDeviceType'
 import { propsForPlatform, stagesForPlatform, type GameDataPlatform } from './config/gameDataPlatform'
@@ -371,6 +384,32 @@ export default function App() {
   const [lanSyncView, setLanSyncView] = useState<{ center: [number, number]; zoom: number; seq: number } | null>(null)
   const [lanViewSyncActive, setLanViewSyncActive] = useState(false)
 
+  // ---- 网页端分享模式（Web 独占，经分享中继服务器 + SSE 房间制同步） ----
+  // 启动时解析 ?share= 后缀（6 位 [a-z0-9]），命中且非本机主机创建即进入访客流程
+  const shareSuffixParam = useMemo(() => {
+    const value = new URLSearchParams(window.location.search).get('share') ?? ''
+    return /^[a-z0-9]{6}$/.test(value) ? value : null
+  }, [])
+  // 中继服务器探测结果（false → 分享按钮置灰）
+  const [shareAvailable, setShareAvailable] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  // 主机态：null = 未分享
+  const [shareHost, setShareHost] = useState<{ suffix: string; title: string } | null>(null)
+  const [shareGuests, setShareGuests] = useState<{ guestCount: number; guests: string[] }>({ guestCount: 0, guests: [] })
+  // 访客态：null = 非访客（modifiedAt/syncedAt 由 SSE state 事件更新）
+  const [shareGuest, setShareGuest] = useState<{
+    suffix: string
+    title: string
+    hostNickname: string
+    nickname: string
+    modifiedAt: number | null
+    syncedAt: number | null
+  } | null>(null)
+  const [shareExpired, setShareExpired] = useState(false)
+  const [shareNicknameAsk, setShareNicknameAsk] = useState(false)
+  const [shareBusy, setShareBusy] = useState(false)
+  const [shareError, setShareError] = useState('')
+
   // ---- 开屏视频（Android 独占） ----
   // 默认视频内置（public/video/intro.mp4），故 Android 冷启动始终先播放
   const [splashConfig, setSplashConfig] = useState<SplashVideoConfig>(loadSplashVideoConfig)
@@ -445,7 +484,9 @@ export default function App() {
 
   // ---- 演示模式访客只读 ----
   // 锁定绘制工具为查看（pan），编辑类操作（撤销/删除/清空/切换工具）全部拦截
-  const demoReadOnly = lanVisitor?.mode === 'demo'
+  // 分享访客（网页端只读）与局域网演示访客同等锁定
+  const shareVisitor = Boolean(shareGuest)
+  const demoReadOnly = lanVisitor?.mode === 'demo' || shareVisitor
   // updateMap 等无依赖回调里读取的镜像（演示全权限锁定总闸用）
   const demoReadOnlyRef = useRef(false)
   useEffect(() => {
@@ -460,10 +501,10 @@ export default function App() {
   }, [])
   const handleToolSelect = useCallback(
     (t: ToolMode) => {
-      if (lanVisitor?.mode === 'demo') return
+      if (demoReadOnly) return
       setTool(t)
     },
-    [lanVisitor],
+    [demoReadOnly],
   )
 
   // 移动端协作访客（手机浏览器访问主机）：自动切换移动端操作逻辑（触控桥接）并提示
@@ -1361,7 +1402,7 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return
-      if (lanVisitor?.mode === 'demo') return
+      if (demoReadOnly) return
       const target = event.target as HTMLElement | null
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
       const key = event.key.toLowerCase()
@@ -1376,7 +1417,7 @@ export default function App() {
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [handleRedo, handleUndo, lanVisitor])
+  }, [handleRedo, handleUndo, demoReadOnly])
 
   // 删除选中（第十二轮：套索圈选后工具栏按钮删除；信号 + 是否有选中上报）
   const [deleteSelectedTick, setDeleteSelectedTick] = useState(0)
@@ -1401,8 +1442,8 @@ export default function App() {
   // 自动持久化（v14：载具队伍 + 行动指令 V2 + 干员独立任务；旧版本由 storage 统一迁移）
   useEffect(() => {
     if (isCinematicDemoFrame) return
-    // 局域网访客：不写本机 localStorage，避免污染访客本机数据
-    if (lanVisitor) return
+    // 局域网访客 / 分享访客：不写本机 localStorage，避免污染访客本机数据
+    if (lanVisitor || shareVisitor) return
     const snapshot = { version: 16 as const, lastMapId: mapId, lastView: view, maps, progress, plans, ui }
     // 桌面端连续编辑时合并密集写入；Android 保留已验收的持久化行为。
     if (platform.kind === 'android') {
@@ -1411,7 +1452,7 @@ export default function App() {
     }
     const timer = window.setTimeout(() => saveState(snapshot), 250)
     return () => window.clearTimeout(timer)
-  }, [isCinematicDemoFrame, lanVisitor, maps, mapId, view, progress, plans, ui])
+  }, [isCinematicDemoFrame, lanVisitor, shareVisitor, maps, mapId, view, progress, plans, ui])
 
   // ---- 局域网协作：主机端（Android）----
   // 启动时恢复服务器运行状态（页面重载后原生服务器可能仍在运行）
@@ -1596,6 +1637,161 @@ export default function App() {
         // 主机不可达时忽略，本地修改保留
       })
   }, [lanVisitor, maps, mapId, view, progress, plans, ui])
+
+  // ---- 网页端分享模式 ----
+  // 启动探测中继服务器（2s 超时；失败则分享按钮置灰）
+  useEffect(() => {
+    if (platform.kind !== 'web' || isCinematicDemoFrame) return
+    let alive = true
+    void probeShareServer().then((ok) => {
+      if (alive) setShareAvailable(ok)
+    })
+    return () => {
+      alive = false
+    }
+  }, [isCinematicDemoFrame])
+
+  // 访客加入：昵称就绪后拉取房间信息（404 = 分享已过期）
+  const joinShareGuest = useCallback((nickname: string) => {
+    if (!shareSuffixParam) return
+    void getShareInfo(shareSuffixParam).then((info) => {
+      if (info === 'expired') {
+        setShareExpired(true)
+        return
+      }
+      if (!info) {
+        setShareError('无法连接分享中继服务器，请稍后重试。')
+        return
+      }
+      setShareGuest({
+        suffix: shareSuffixParam,
+        title: info.title,
+        hostNickname: info.hostNickname,
+        nickname,
+        modifiedAt: info.modifiedAt > 0 ? info.modifiedAt : null,
+        syncedAt: null,
+      })
+    })
+  }, [shareSuffixParam])
+
+  // 启动：有 ?share= 后缀且非本机主机创建 → 访客流程（首访弹昵称窗，localStorage 记忆）
+  useEffect(() => {
+    if (platform.kind !== 'web' || isCinematicDemoFrame || !shareSuffixParam) return
+    const stored = (localStorage.getItem(SHARE_NICKNAME_KEY) ?? '').trim()
+    if (stored) joinShareGuest(stored)
+    else setShareNicknameAsk(true)
+  }, [isCinematicDemoFrame, shareSuffixParam, joinShareGuest])
+
+  // 首访昵称确认：写入 localStorage 后加入
+  const handleShareNicknameSubmit = useCallback((nickname: string) => {
+    localStorage.setItem(SHARE_NICKNAME_KEY, nickname)
+    setShareNicknameAsk(false)
+    joinShareGuest(nickname)
+  }, [joinShareGuest])
+
+  // 访客修改昵称：更新存储，SSE effect 依赖 nickname 自动重连
+  const handleShareNicknameChange = useCallback((nickname: string) => {
+    localStorage.setItem(SHARE_NICKNAME_KEY, nickname)
+    setShareGuest((current) => (current ? { ...current, nickname } : current))
+  }, [])
+
+  // 访客：SSE 订阅主机状态（state → 应用快照并记录 modifiedAt/syncedAt；expired → 过期态）
+  const shareGuestSuffix = shareGuest?.suffix ?? null
+  const shareGuestNickname = shareGuest?.nickname ?? null
+  useEffect(() => {
+    if (!shareGuestSuffix || !shareGuestNickname || shareExpired) return
+    const events = openShareEvents(shareGuestSuffix, shareGuestNickname)
+    events.addEventListener('state', (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as { state?: unknown; modifiedAt?: unknown }
+        if (typeof data.state !== 'string') return
+        applyRemoteState(data.state)
+        const modifiedAt = typeof data.modifiedAt === 'number' ? data.modifiedAt : null
+        setShareGuest((current) => (current
+          ? { ...current, modifiedAt: modifiedAt ?? current.modifiedAt, syncedAt: Date.now() }
+          : current))
+      } catch {
+        // 非法数据忽略，等待下一帧
+      }
+    })
+    events.addEventListener('expired', () => {
+      events.close()
+      setShareExpired(true)
+    })
+    return () => events.close()
+  }, [shareGuestSuffix, shareGuestNickname, shareExpired, applyRemoteState])
+
+  // 主机：快照变化 500ms 防抖推送整份状态（modifiedAt = 推送时刻）
+  useEffect(() => {
+    if (!shareHost) return
+    const snapshot = { version: 16 as const, lastMapId: mapId, lastView: view, maps, progress, plans, ui }
+    const json = JSON.stringify(snapshot)
+    const timer = window.setTimeout(() => {
+      void pushShareState(shareHost.suffix, json, Date.now())
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [shareHost, maps, mapId, view, progress, plans, ui])
+
+  // 主机：5s 心跳保活 + 2s 轮询访客列表 + pagehide sendBeacon 关闭房间
+  useEffect(() => {
+    if (!shareHost) return
+    const beatTimer = window.setInterval(() => void shareBeat(shareHost.suffix), 5000)
+    const pollTimer = window.setInterval(() => {
+      void getShareInfo(shareHost.suffix).then((info) => {
+        if (info === 'expired') {
+          // 房间已不存在（中继重启/心跳超时）：本地退出主机态
+          setShareHost(null)
+          return
+        }
+        if (info) setShareGuests({ guestCount: info.guestCount, guests: info.guests })
+      })
+    }, 2000)
+    const onPageHide = () => closeShareBeacon(shareHost.suffix)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      window.clearInterval(beatTimer)
+      window.clearInterval(pollTimer)
+      window.removeEventListener('pagehide', onPageHide)
+    }
+  }, [shareHost])
+
+  // 主机开启分享：生成 6 位后缀 → POST host（409 冲突自动换后缀重试）→ pushState 加 ?share=
+  const handleShareStart = useCallback((title: string) => {
+    if (!shareAvailable || shareHost || shareBusy) return
+    setShareBusy(true)
+    setShareError('')
+    void (async () => {
+      const nickname = (localStorage.getItem(SHARE_NICKNAME_KEY) ?? '').trim() || '主机'
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const suffix = genShareSuffix()
+        const result = await createShareHost(suffix, title, nickname)
+        if (result === 'conflict') continue
+        if (result === 'created') {
+          setShareHost({ suffix, title })
+          setShareGuests({ guestCount: 0, guests: [] })
+          const url = new URL(window.location.href)
+          url.searchParams.set('share', suffix)
+          window.history.pushState(null, '', `${url.pathname}${url.search}${url.hash}`)
+          setShareBusy(false)
+          return
+        }
+        break
+      }
+      setShareError('开启分享失败，请稍后重试。')
+      setShareBusy(false)
+    })()
+  }, [shareAvailable, shareHost, shareBusy])
+
+  // 主机停止分享：POST close + pushState 去掉 ?share= 参数
+  const handleShareStop = useCallback(() => {
+    if (!shareHost) return
+    void closeShare(shareHost.suffix)
+    setShareHost(null)
+    setShareGuests({ guestCount: 0, guests: [] })
+    const url = new URL(window.location.href)
+    url.searchParams.delete('share')
+    window.history.pushState(null, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [shareHost])
 
   useEffect(() => {
     if (isCinematicDemoFrame) return
@@ -2991,6 +3187,9 @@ export default function App() {
         onClearAll={demoReadOnly ? () => {} : handleClearAll}
         readOnly={demoReadOnly}
         onOpenTactical={() => setTacticalOpen(true)}
+        onOpenShare={platform.kind === 'web' && !lanVisitor ? () => setShareOpen(true) : undefined}
+        shareRunning={Boolean(shareHost)}
+        shareAvailable={shareAvailable}
         onOpenLanCollab={() => setLanCollabOpen(true)}
         lanCollabRunning={Boolean(lanSession?.running)}
         splashSkippable={splashConfig.skippable}
@@ -3247,6 +3446,26 @@ export default function App() {
           onSessionChange={setLanSession}
         />
       ) : null}
+
+      {/* 网页端分享弹窗（Web 独占：未分享 / 主机态 / 访客态 / 过期态） */}
+      {platform.kind === 'web' ? (
+        <ShareModal
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          host={shareHost ? { ...shareHost, guestCount: shareGuests.guestCount, guests: shareGuests.guests } : null}
+          guest={shareGuest}
+          expired={shareExpired}
+          available={shareAvailable}
+          busy={shareBusy}
+          error={shareError}
+          onStart={handleShareStart}
+          onStop={handleShareStop}
+          onNicknameChange={handleShareNicknameChange}
+        />
+      ) : null}
+
+      {/* 分享访客首访昵称弹窗（必填，确认后加入） */}
+      <ShareNicknameModal open={shareNicknameAsk} onSubmit={handleShareNicknameSubmit} />
 
       {/* 开屏视频文件选择（隐藏 input，由高阶菜单「选择视频…」触发） */}
       {platform.kind === 'android' ? (
