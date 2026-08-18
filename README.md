@@ -2,9 +2,16 @@
   <img src="./build/logo.png" width="180" alt="三角洲战术地图 Logo" />
   <h1>三角洲战术地图</h1>
   <p>面向《三角洲行动》全面战场的地图标注、兵棋推演与战术方案编辑工具。</p>
+  <p>
+    <a href="https://github.com/aeuicey/delta-force/actions/workflows/deploy.yml"><img src="https://github.com/aeuicey/delta-force/actions/workflows/deploy.yml/badge.svg" alt="Deploy Status" /></a>
+    <a href="https://aeuicey.github.io/delta-force/"><img src="https://img.shields.io/badge/Demo-GitHub%20Pages-01ff84" alt="GitHub Pages Demo" /></a>
+    <a href="https://github.com/aeuicey/delta-force/releases"><img src="https://img.shields.io/badge/Android-APK%20Release-blue" alt="APK Release" /></a>
+  </p>
 </div>
 
 > 本项目是非官方社区工具，与腾讯、琳琅天上及《三角洲行动》官方无隶属或合作关系。
+
+> **本仓库（aeuicey/delta-force）是开发分支**：新功能与修复先在此开发验证，再通过 Pull Request 提交到上游主仓库 [Deng0430/delta-force](https://github.com/Deng0430/delta-force)。稳定版本请以上游仓库为准。
 
 ## 项目简介
 
@@ -116,6 +123,66 @@ cd android
 
 ```bash
 npm run android:open
+```
+
+## 在线 Demo 与自动发布
+
+main 分支每次有新提交，GitHub Actions 会自动完成两件事：
+
+- **Web Demo**：构建并部署到 GitHub Pages，直接访问 <https://aeuicey.github.io/delta-force/> 即可在线体验。
+- **Android APK**：打包 debug 版 APK 并创建 Release（标签形如 `android-v0.0.1-b<构建号>`），在 [Releases](https://github.com/aeuicey/delta-force/releases) 页下载。
+
+工作流见 `.github/workflows/deploy.yml`，运行状态见页首徽章。
+
+## Docker 部署
+
+仓库内置 Docker 打包方案（`Docker/` 目录），适合自托管部署：
+
+```bash
+# 项目根目录构建镜像
+docker build -f Docker/Dockerfile -t deltaforce-tactical-map:0.0.1 .
+
+# 运行（端口按需修改）
+docker run -d -p 8080:80 --name deltaforce-tactical-map deltaforce-tactical-map:0.0.1
+# 访问 http://localhost:8080/
+```
+
+也可以进入 `Docker/` 目录使用 `docker compose up -d --build`。镜像为多阶段构建（Node 构建 + Nginx 托管），纯静态站点无后端依赖。详细说明见 [Docker/README.md](./Docker/README.md)。
+
+## 项目结构
+
+```mermaid
+mindmap
+  root((三角洲战术地图))
+    应用入口
+      Web 浏览器
+      Electron Windows 桌面端
+      Capacitor Android 横屏端
+    src 源码
+      components 地图与编辑器组件
+        LayerManager 绘制/套索/锁定核心
+        MapView 地图容器
+        DrawBar 工具栏
+        WargamePanel 兵棋面板
+      config 地图与游戏数据
+        maps 瓦片配置
+        pointsStages PC 端据点数据
+        mobileOfficialData 手游端数据
+      platform 平台适配层
+      utils 存储/导出/坐标工具
+    数据链路
+      瓦片与图标 运行时直链腾讯 CDN
+      据点/阶段数据 离线提取编译进包
+      用户编辑状态 localStorage 持久化
+    构建与发布
+      Vite Web 构建
+      Electron Builder Windows 安装包
+      Gradle Android APK
+      Docker 自托管镜像
+    CI/CD
+      GitHub Actions
+        Pages 自动部署 Demo
+        APK 自动发布 Release
 ```
 
 ## 常用命令

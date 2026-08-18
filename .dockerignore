@@ -1,0 +1,21 @@
+# Docker 构建上下文忽略文件（上下文为项目根目录）
+node_modules
+dist
+release
+release-optimized
+out
+android
+JDK21
+JDK*
+demo
+map_source
+.git
+.gitignore
+docs
+日志
+美术资源
+*.log
+*.local
+.env
+.env.*
+!.env.example

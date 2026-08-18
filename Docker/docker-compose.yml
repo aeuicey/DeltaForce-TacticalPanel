@@ -1,0 +1,10 @@
+services:
+  deltaforce-tactical-map:
+    build:
+      context: ..              # 构建上下文为项目根目录
+      dockerfile: Docker/Dockerfile
+    image: deltaforce-tactical-map:0.0.1
+    container_name: deltaforce-tactical-map
+    ports:
+      - "8080:80"              # 宿主机端口:容器端口，按需修改
+    restart: unless-stopped
