@@ -18,6 +18,7 @@
 三角洲战术地图将地图信息、阶段据点、兵棋部署、行动路线和战术标注集中到一个工作台中，适用于战前规划、队伍分工、战术复盘和自定义模式配置。
 
 项目支持浏览器、Windows 桌面端和 Android 横屏端，不依赖后端服务。编辑状态和战术方案默认保存在本地。
+<img width="2297" height="1182" alt="image" src="https://github.com/user-attachments/assets/abe3b32c-22c8-4570-b589-a0ac2649edb5" />
 
 ## 主要功能
 
