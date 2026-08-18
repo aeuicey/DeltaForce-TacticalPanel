@@ -1683,6 +1683,8 @@ export default function App() {
   }, [])
 
   const handleLayerChange = useCallback((key: keyof LayerVisibility, value: boolean) => {
+    // 演示模式访客只读：地图分层由主机同步，不允许本地修改
+    if (demoReadOnlyRef.current) return
     setUi((u) => {
       const next: typeof u = { ...u, layers: { ...u.layers, [key]: value } }
       // 地图道具总开关变化时，所有道具子项跟随开启/关闭
@@ -1712,6 +1714,7 @@ export default function App() {
 
   /** 问题2：道具按类型显示/屏蔽 */
   const handlePropVisChange = useCallback((name: string, value: boolean) => {
+    if (demoReadOnlyRef.current) return
     setUi((u) => ({
       ...u,
       layers: value ? { ...u.layers, props: true } : u.layers,
@@ -2940,6 +2943,8 @@ export default function App() {
     setUi((current) => ({ ...current, legendOpen: !current.legendOpen }))
   }, [])
   const handleSelectPointPanelStage = useCallback((stageId: string) => {
+    // 演示模式访客只读：点位进度由主机同步，不允许本地修改
+    if (demoReadOnlyRef.current) return
     if (activeModeMap) {
       handleSelectModeStage(stageId)
       return
@@ -2952,12 +2957,12 @@ export default function App() {
   }, [activeModeMap, handleSelectModeStage, mapId, stages])
 
   return (
-    <div className={`app platform-${device.platform} ${device.mobileLayout ? 'mobile-layout' : 'desktop-layout'} ${ui.paletteOpen ? 'left-panel-open' : 'left-panel-closed'} ${isCinematicMapOnly ? 'cinematic-map-only' : ''} ${isCinematicLayerTour ? 'cinematic-layer-tour' : ''} ${isCinematicBattleCompare ? `cinematic-battle-${cinematicDemoStage?.toLowerCase()}` : ''} ${isCinematicC1Highlight ? `cinematic-c1-${cinematicDemoStage?.toLowerCase()}` : ''} ${platform.kind === 'android' && splashDone ? 'app-fade-in' : ''}`} style={{ '--left-panel-width': `${ui.leftPanelWidth}px` } as CSSProperties}>
+    <div className={`app platform-${device.platform} ${device.mobileLayout ? 'mobile-layout' : 'desktop-layout'} ${ui.paletteOpen ? 'left-panel-open' : 'left-panel-closed'} ${demoReadOnly ? 'demo-readonly' : ''} ${isCinematicMapOnly ? 'cinematic-map-only' : ''} ${isCinematicLayerTour ? 'cinematic-layer-tour' : ''} ${isCinematicBattleCompare ? `cinematic-battle-${cinematicDemoStage?.toLowerCase()}` : ''} ${isCinematicC1Highlight ? `cinematic-c1-${cinematicDemoStage?.toLowerCase()}` : ''} ${platform.kind === 'android' && splashDone ? 'app-fade-in' : ''}`} style={{ '--left-panel-width': `${ui.leftPanelWidth}px` } as CSSProperties}>
       <Toolbar
         mapId={mapId}
-        onMapId={setMapId}
+        onMapId={demoReadOnly ? () => {} : setMapId}
         gameDataPlatform={gameDataPlatform}
-        onGameDataPlatform={(nextPlatform) => {
+        onGameDataPlatform={demoReadOnly ? () => {} : (nextPlatform) => {
           setGameDataPlatform(nextPlatform)
           localStorage.setItem('deltaforce-game-data-platform', nextPlatform)
           setProgress((current) => ({ ...current, [mapId]: 0 }))
@@ -2966,10 +2971,10 @@ export default function App() {
         }}
         gameModeName={gameModeName}
         gameModeOptions={modeStore.profiles.map((profile) => ({ id: profile.id, name: profile.name }))}
-        onGameMode={handleSelectGameMode}
+        onGameMode={demoReadOnly ? () => {} : handleSelectGameMode}
         onOpenModeEditor={handleOpenModeEditor}
         view={view}
-        onView={setView}
+        onView={demoReadOnly ? () => {} : setView}
         tool={tool}
         onTool={handleToolSelect}
         draw={ui.draw}

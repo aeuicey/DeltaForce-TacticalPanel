@@ -6083,6 +6083,19 @@ body {
   to { opacity: 1; }
 }
 
+/* 演示模式访客只读：左右面板与工具栏选择器全部禁止操作（保留滚动查看，状态由主机同步） */
+.demo-readonly .left-panel :is(input, button, select, summary),
+.demo-readonly .point-panel :is(input, button, select, summary),
+.demo-readonly .toolbar .topbar-select,
+.demo-readonly .toolbar .seg {
+  pointer-events: none;
+}
+
+.demo-readonly .left-panel :is(input, button, select, summary),
+.demo-readonly .point-panel :is(input, button, select, summary) {
+  opacity: 0.55;
+}
+
 /* 访客端演示模式横幅（仅观看，固定顶部） */
 .lan-demo-banner {
   position: relative;
