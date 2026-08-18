@@ -1,0 +1,45 @@
+name: AI Code Review
+
+# PR 打开/更新时审查 PR diff；push 到 main 时审查本次提交 diff
+# 使用 GitHub Models 免费推理 API，仅需 GITHUB_TOKEN，无需外部密钥
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write   # 评论 PR / commit
+  models: read           # GitHub Models 推理 API
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare diff
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            git diff "origin/${{ github.base_ref }}...HEAD" > /tmp/ai-review.diff
+          else
+            git diff HEAD~1 HEAD > /tmp/ai-review.diff || git show HEAD > /tmp/ai-review.diff
+          fi
+          wc -c /tmp/ai-review.diff
+
+      - name: Run AI review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMIT_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+          DIFF_FILE: /tmp/ai-review.diff
+        run: node scripts/ai-review.cjs
