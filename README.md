@@ -161,12 +161,17 @@ npm run android:open
 
 ## 在线 Demo 与自动发布
 
-main 分支每次有新提交，GitHub Actions 会自动完成两件事：
+main 分支每次有新提交，GitHub Actions 自动完成：Pages 部署、Windows 安装包、Android APK、Docker 镜像四路构建（旧构建自动清理，每个渠道只保留最新版），运行状态见页首徽章。
 
-- **Web Demo**：构建并部署到 GitHub Pages，直接访问 <https://aeuicey.github.io/delta-force/> 即可在线体验。
-- **Android APK**：打包 debug 版 APK 并创建 Release（标签形如 `android-v0.0.1-b<构建号>`），在 [Releases](https://github.com/aeuicey/delta-force/releases) 页下载。
+### 三个版本的区别
 
-工作流见 `.github/workflows/deploy.yml`，运行状态见页首徽章。
+| 版本 | 获取方式 | 说明 |
+| --- | --- | --- |
+| **纯静态版**（GitHub Pages / Windows 桌面端） | 浏览器访问 <https://aeuicey.github.io/delta-force/>；或 Releases 下载 `desktop-v*-b*` 的 `deltaforce-tactical-map-*-setup.exe` | 同一份构建产物：打开即用、无需服务器。桌面端为 Electron 壳（内置静态服务器），支持离线使用与本地数据保存。**不含**分享模式（无中继服务器） |
+| **网页版**（完整功能，需服务器） | `npm run share:server` 本地启动，或 Docker 一键部署（见下文） | 在纯静态版基础上多出**分享模式**（随机链接、访客昵称统计、实时同步、过期失效），功能最完整 |
+| **手机版**（Android APK） | Releases 下载 `android-v*-b*` 的 APK | 固定横屏触控优化，独占**局域网协作**（演示/协作双模式、同步视角）与**开屏视频** |
+
+> 三个版本共享同一套代码与战术数据格式，战术方案可互通导出。
 
 ## Docker 部署
 

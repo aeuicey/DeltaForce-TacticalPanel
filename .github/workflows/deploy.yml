@@ -55,8 +55,7 @@ jobs:
 
   # ---- Android APK → Release ----
   apk:
-    runs-on: ubuntu-latest
-    steps:
+    runs-on: ubuntu-latest    steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -103,4 +102,41 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           KEEP_PREFIX: android-v${{ env.VERSION }}-b
+        run: node scripts/cleanup-releases.cjs
+
+  # ---- Windows 桌面端（Electron，与 GitHub Pages 同款纯静态构建，不含服务器功能）→ Release ----
+  desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      # 与 Pages 同一份 dist（默认 base '/'，Electron 内置静态服务器托管，无需子路径适配）
+      - run: npm run build
+
+      - name: Build Windows installer
+        run: npx electron-builder --win
+
+      - name: Create Release with installer
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-v${{ env.VERSION }}-b${{ github.run_number }}
+          name: Windows 桌面端 v${{ env.VERSION }} (build ${{ github.run_number }})
+          body: |
+            由 GitHub Actions 自动构建（commit ${{ github.sha }}）。
+            NSIS 安装包，x64。纯静态版，与 GitHub Pages 同款（不含分享模式中联）。
+          files: release/deltaforce-tactical-map-${{ env.VERSION }}-setup.exe
+
+      # 同一版本号只保留最新 build，旧的 release 与标签自动删除
+      - name: Cleanup old releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          KEEP_PREFIX: desktop-v${{ env.VERSION }}-b
         run: node scripts/cleanup-releases.cjs
