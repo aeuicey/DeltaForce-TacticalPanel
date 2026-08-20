@@ -122,7 +122,8 @@ jobs:
       - run: npm run build
 
       - name: Build Windows installer
-        run: npx electron-builder --win
+        # --publish never：发布由后续 softprops/action-gh-release 步骤负责
+        run: npx electron-builder --win --publish never
 
       - name: Create Release with installer
         uses: softprops/action-gh-release@v2
