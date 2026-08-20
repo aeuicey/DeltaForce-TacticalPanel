@@ -16,12 +16,22 @@ interface SplashVideoOverlayProps {
 export default function SplashVideoOverlay({ videoUri, skippable, onClose }: SplashVideoOverlayProps) {
   const src = videoUri ?? `${import.meta.env.BASE_URL}video/intro.mp4`
   const [hintVisible, setHintVisible] = useState(skippable)
+  const [errorVisible, setErrorVisible] = useState(false)
+  // 首帧就绪前隐藏视频，避免 WebView 默认的播放占位图标闪现
+  const [ready, setReady] = useState(false)
   const closedRef = useRef(false)
 
   const closeOnce = () => {
     if (closedRef.current) return
     closedRef.current = true
     onClose()
+  }
+
+  // 播放失败：覆盖层内显示应用内提示（安卓原生 alert 深色主题不可读），短暂展示后关闭
+  const handleError = () => {
+    if (closedRef.current) return
+    setErrorVisible(true)
+    window.setTimeout(closeOnce, 1800)
   }
 
   // 「点击即可跳过」提示条幅 5 秒后自动消失
@@ -42,12 +52,12 @@ export default function SplashVideoOverlay({ videoUri, skippable, onClose }: Spl
         autoPlay
         muted={false}
         playsInline
+        className={ready ? 'ready' : ''}
+        onCanPlay={() => setReady(true)}
         onEnded={closeOnce}
-        onError={() => {
-          window.alert('开屏视频播放失败，已跳过。')
-          closeOnce()
-        }}
+        onError={handleError}
       />
+      {errorVisible ? <div className="splash-error-hint">开屏视频播放失败，已跳过</div> : null}
       {skippable && hintVisible ? <div className="splash-skip-hint">点击即可跳过</div> : null}
     </div>
   )

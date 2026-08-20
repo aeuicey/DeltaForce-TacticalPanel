@@ -386,7 +386,9 @@ public class LanServerPlugin extends Plugin {
         }
 
         private Response jsonResponse(Response.IStatus status, JSONObject json) {
-            return newFixedLengthResponse(status, "application/json", json.toString());
+            // 必须显式声明 UTF-8：NanoHTTPD 对无 charset 的响应体按 US-ASCII 编码，
+            // 中文会被替换为 '?'（兵棋推演干员名等中文内容乱码的根因）
+            return newFixedLengthResponse(status, "application/json; charset=UTF-8", json.toString());
         }
 
         private Response addCors(Response response) {

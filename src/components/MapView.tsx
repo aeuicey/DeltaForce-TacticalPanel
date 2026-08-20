@@ -146,6 +146,8 @@ interface MapViewProps {
   cinematicBattleCompare?: string | null
   /** 演示模式访客：跟随主机视角（seq 去重，仅新视角触发 setView） */
   syncView?: { center: [number, number]; zoom: number; seq: number } | null
+  /** 视角跟随生效中：锁定访客的拖动/缩放等视角操作 */
+  viewSyncLock?: boolean
   /** 移动端协作访客：启用触控桥接（移动端操作逻辑） */
   touchBridge?: boolean
 }
@@ -187,6 +189,7 @@ function MapSync({
   minZoom,
   defaultZoom,
   syncView,
+  viewSyncLock,
 }: {
   config: MapConfig
   onReady: (map: L.Map) => void
@@ -194,16 +197,38 @@ function MapSync({
   minZoom: number
   defaultZoom: number
   syncView?: { center: [number, number]; zoom: number; seq: number } | null
+  /** 视角跟随生效中：锁定访客的拖动/缩放等一切视角操作 */
+  viewSyncLock?: boolean
 }) {
   const map = useMap()
   const appliedViewRef = useRef('')
   const appliedSyncSeqRef = useRef(-1)
-  // 演示模式访客：主机推送的视角按 seq 去重后跟随（flyTo 平滑移动/缩放，观看更舒适）
+  // 演示模式访客：主机推送的视角按 seq 去重后跟随（flyTo 平滑移动/缩放，观看更舒适）。
+  // 主机屏幕可能更小（移动端 minZoom 更低），缩放钳位到本机范围，避免出界后反复调整。
   useEffect(() => {
     if (!syncView || syncView.seq === appliedSyncSeqRef.current) return
     appliedSyncSeqRef.current = syncView.seq
-    map.flyTo(syncView.center, syncView.zoom, { duration: 0.8, easeLinearity: 0.5 })
+    const zoom = Math.min(Math.max(syncView.zoom, map.getMinZoom()), map.getMaxZoom())
+    map.flyTo(syncView.center, zoom, { duration: 0.8, easeLinearity: 0.5 })
   }, [map, syncView])
+  // 视角跟随生效期间锁定访客视角操作（拖动/滚轮/双指/双击/键盘），解除后恢复
+  useEffect(() => {
+    if (!viewSyncLock) return
+    map.dragging.disable()
+    map.scrollWheelZoom.disable()
+    map.touchZoom.disable()
+    map.doubleClickZoom.disable()
+    map.boxZoom.disable()
+    map.keyboard.disable()
+    return () => {
+      map.dragging.enable()
+      map.scrollWheelZoom.enable()
+      map.touchZoom.enable()
+      map.doubleClickZoom.enable()
+      map.boxZoom.enable()
+      map.keyboard.enable()
+    }
+  }, [map, viewSyncLock])
   useEffect(() => {
     const center = initialView?.center ?? config.initCenter
     const zoom = initialView?.zoom ?? defaultZoom
@@ -414,6 +439,7 @@ export default function MapView({
   cinematicInitialView,
   cinematicBattleCompare,
   syncView,
+  viewSyncLock = false,
   touchBridge = false,
 }: MapViewProps) {
   const bounds = useMemo(() => mapBounds(config), [config])
@@ -721,6 +747,7 @@ export default function MapView({
           minZoom={minZoom}
           defaultZoom={defaultZoom}
           syncView={syncView}
+          viewSyncLock={viewSyncLock}
         />
         <MapResizeSync />
         {cinematicBattleCompare ? <CinematicBattleHighlights stage={cinematicBattleCompare} /> : null}

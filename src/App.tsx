@@ -360,6 +360,8 @@ export default function App() {
   }))
 
   const mapRef = useRef<L.Map | null>(null)
+  // 应用内提示弹窗（替代 window.alert，避免安卓原生弹窗深色不可读）
+  const [appAlert, setAppAlert] = useState<string | null>(null)
   // ---- 局域网协作模式 ----
   // 主机端（Android）：协作弹窗开关 + 服务器运行信息
   const [lanCollabOpen, setLanCollabOpen] = useState(false)
@@ -442,7 +444,7 @@ export default function App() {
     if (!file) return
     const isMp4 = file.type === 'video/mp4' || /\.mp4$/i.test(file.name)
     if (!isMp4) {
-      window.alert('仅支持 MP4 格式的开屏视频，请重新选择。')
+      setAppAlert('仅支持 MP4 格式的开屏视频，请重新选择。')
       return
     }
     void (async () => {
@@ -466,7 +468,7 @@ export default function App() {
         updateSplashConfig({ videoUri: Capacitor.convertFileSrc(uri) })
       } catch (err) {
         console.error('开屏视频保存失败', err)
-        window.alert('开屏视频保存失败，请重试。')
+        setAppAlert('开屏视频保存失败，请重试。')
       }
     })()
   }, [updateSplashConfig])
@@ -1627,7 +1629,8 @@ export default function App() {
     lanLastJsonRef.current = json
     fetch('/api/state', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // 必须显式声明 charset：NanoHTTPD 对无 charset 的请求体按 US-ASCII 解码，中文会丢失
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: json,
     })
       .then((res) => (res.ok ? res.json() : null))
@@ -1866,7 +1869,7 @@ export default function App() {
     syncBtnPressRef.current.longFired = false
     syncBtnPressRef.current.timer = window.setTimeout(() => {
       syncBtnPressRef.current.longFired = true
-      window.alert('同步视角：开启后，演示模式访客的地图视角将实时跟随主机（约每 0.8 秒同步一次），访客端右下角显示「视角同步中」。再次点击按钮即可关闭同步。')
+      setAppAlert('同步视角：开启后，演示模式访客的地图视角将实时跟随主机（约每 0.8 秒同步一次），访客端右下角显示「视角同步中」。再次点击按钮即可关闭同步。')
     }, 500)
   }, [])
   const handleSyncBtnPressEnd = useCallback(() => {
@@ -3351,6 +3354,8 @@ export default function App() {
           cinematicBattleCompare={isCinematicBattleCompare ? cinematicDemoStage : null}
           // 演示模式访客：跟随主机「同步视角」推送的地图视角
           syncView={demoReadOnly ? lanSyncView : null}
+          // 视角跟随生效期间锁定访客视角操作
+          viewSyncLock={demoReadOnly && lanViewSyncActive}
           // 移动端协作访客：启用触控桥接（移动端操作逻辑）
           touchBridge={mobileVisitor}
         />
@@ -3423,6 +3428,23 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* 应用内提示弹窗：替代 window.alert（安卓 WebView 原生弹窗深色主题下深底深字不可读） */}
+      {appAlert ? (
+        <div
+          className="mobile-confirm-backdrop"
+          role="presentation"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) setAppAlert(null)
+          }}
+        >
+          <div className="mobile-confirm-dialog" role="alertdialog" aria-modal="true" aria-label="提示">
+            <p>{appAlert}</p>
+            <div className="mobile-confirm-actions">
+              <button type="button" className="danger" onClick={() => setAppAlert(null)}>知道了</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <TacticalBoardModal
         open={tacticalOpen}
