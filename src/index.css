@@ -6057,6 +6057,28 @@ body {
   transition: opacity 0.3s ease;
 }
 
+/* 静音/取消静音按钮（右上角，中等透明；黑色背景下白图标自动带微光） */
+.splash-mute-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  z-index: 2;
+}
+.splash-mute-btn svg {
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
+}
+
 /* 「点击即可跳过」半透明小条幅（右下角，淡入后 5 秒由组件移除） */
 .splash-skip-hint {
   position: absolute;
