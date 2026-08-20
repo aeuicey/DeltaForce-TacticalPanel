@@ -42,3 +42,11 @@ jobs:
             ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # GHCR 只保留当次推送的标签版本（latest/版本号/sha），旧镜像版本自动删除
+      - name: Cleanup old image versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE: delta-force
+          KEEP_TAGS: latest,0.0.2-indoor,sha-${{ github.sha }}
+        run: node scripts/cleanup-ghcr.cjs

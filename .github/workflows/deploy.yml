@@ -96,3 +96,11 @@ jobs:
             由 GitHub Actions 自动构建（commit ${{ github.sha }}）。
             Debug 包，仅供测试安装。
           files: deltaforce-tactical-map-${{ env.VERSION }}-android-debug.apk
+
+      # 同一版本号只保留最新 build，旧的 release 与标签自动删除
+      - name: Cleanup old releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          KEEP_PREFIX: android-v${{ env.VERSION }}-b
+        run: node scripts/cleanup-releases.cjs
