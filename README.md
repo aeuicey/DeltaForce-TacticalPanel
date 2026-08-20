@@ -6,6 +6,7 @@
     <a href="https://github.com/aeuicey/delta-force/actions/workflows/deploy.yml"><img src="https://github.com/aeuicey/delta-force/actions/workflows/deploy.yml/badge.svg" alt="Deploy Status" /></a>
     <a href="https://aeuicey.github.io/delta-force/"><img src="https://img.shields.io/badge/Demo-GitHub%20Pages-01ff84" alt="GitHub Pages Demo" /></a>
     <a href="https://github.com/aeuicey/delta-force/releases"><img src="https://img.shields.io/badge/Android-APK%20Release-blue" alt="APK Release" /></a>
+    <a href="https://github.com/aeuicey/delta-force/pkgs/container/delta-force"><img src="https://img.shields.io/badge/Docker-ghcr.io%2Faeuicey%2Fdelta--force-2496ED?logo=docker&logoColor=white" alt="GitHub Package" /></a>
   </p>
 </div>
 
