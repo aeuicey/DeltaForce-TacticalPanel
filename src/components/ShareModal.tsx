@@ -67,13 +67,32 @@ export default function ShareModal({
   // 未分享态：战术名输入；访客态：昵称修改输入（打开时同步初值）
   const [title, setTitle] = useState('')
   const [nickInput, setNickInput] = useState('')
+  const [copied, setCopied] = useState(false)
   useEffect(() => {
     if (!open) return
     setTitle('')
     setNickInput(guest?.nickname ?? '')
+    setCopied(false)
     // 仅在打开时初始化输入框
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  /** 复制完整分享链接（剪贴板 API 失败时回退 execCommand） */
+  const handleCopyLink = async () => {
+    const url = `${window.location.origin}${window.location.pathname}?share=${host?.suffix ?? ''}`
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      const input = document.createElement('textarea')
+      input.value = url
+      document.body.appendChild(input)
+      input.select()
+      document.execCommand('copy')
+      input.remove()
+    }
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 2000)
+  }
 
   if (!open) return null
 
@@ -103,8 +122,13 @@ export default function ShareModal({
                 <span className="tb-value">{host.title}</span>
                 <span className="share-badge host">主机</span>
               </div>
-              <div className="share-suffix" title="分享后缀（点击全选复制）">{host.suffix}</div>
+              <div className="tb-row">
+                <span className="tb-label">分享链接</span>
+              </div>
               <div className="share-url">{shareUrl}</div>
+              <button className="tb-primary" onClick={handleCopyLink}>
+                {copied ? '已复制到剪贴板' : '复制链接'}
+              </button>
               <div className="tb-tip">访客用浏览器打开上述链接即可实时观看你的战术布置（只读）。</div>
               <div className="tb-row">
                 <span className="tb-label">访客</span>

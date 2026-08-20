@@ -508,7 +508,8 @@ export default function App() {
   )
 
   // 移动端协作访客（手机浏览器访问主机）：自动切换移动端操作逻辑（触控桥接）并提示
-  const mobileVisitor = Boolean(lanVisitor) && (device.coarsePointer || device.mobileLayout)
+  // 网页端自动识别移动端（含协作/分享访客与普通访问）：检测到移动端即切换触控操作逻辑并提示
+  const mobileVisitor = platform.kind === 'web' && (device.coarsePointer || device.mobileLayout)
   const mobileVisitorNotifiedRef = useRef(false)
   useEffect(() => {
     if (!mobileVisitor) {
@@ -1717,6 +1718,7 @@ export default function App() {
     events.addEventListener('expired', () => {
       events.close()
       setShareExpired(true)
+      showLanFlash('主机已停止分享，该分享已失效')
     })
     return () => events.close()
   }, [shareGuestSuffix, shareGuestNickname, shareExpired, applyRemoteState])
