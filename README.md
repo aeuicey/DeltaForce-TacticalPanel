@@ -249,16 +249,41 @@ main 分支每次有新提交，GitHub Actions 自动完成：Pages 部署、Win
 
 ## Docker 部署
 
-仓库内置 Docker 打包方案（`Docker/` 目录），适合自托管部署（含分享模式中继）。
+本仓库通过 GitHub Actions 在每次提交后自动构建 Docker 镜像并推送到在线镜像仓库 **GHCR**（GitHub Container Registry），无需自己构建。
 
-**一键部署（推荐）**：每次提交后 GitHub Actions 自动构建镜像推送到 GHCR，远程机器只需安装 Docker，一行命令完成部署：
+### 在线镜像仓库一键部署（推荐）
+
+远程计算机只需安装 Docker，**不用克隆仓库、不用装 Node**，一行命令完成部署：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aeuicey/DeltaForce-TacticalPanel/main/Docker/deploy.sh | bash
-# 访问 http://<远程机器IP>:8080/（PORT=端口 可自定义）
+# 完成后访问 http://<远程机器IP>:8080/
 ```
 
-**手动构建**：
+脚本会自动拉取最新镜像、清理旧容器并以 `8080 → 8781` 端口启动服务（含分享模式中继）。自定义端口：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aeuicey/DeltaForce-TacticalPanel/main/Docker/deploy.sh | PORT=9000 bash
+```
+
+也可以不用脚本，直接一条 `docker run`：
+
+```bash
+docker run -d --name deltaforce-tactical-map --restart unless-stopped \
+  -p 8080:8781 ghcr.io/aeuicey/deltaforce-tacticalpanel:latest
+```
+
+**可用镜像标签**（`ghcr.io/aeuicey/deltaforce-tacticalpanel`）：
+
+| 标签 | 说明 |
+| --- | --- |
+| `latest` | 最新构建（默认） |
+| `0.0.2-indoor` | 版本号标签（随版本更新） |
+| `sha-<commit>` | 指定某次提交的构建 |
+
+**更新到最新版**：重新运行一键部署脚本即可（自动拉新镜像并替换容器）。
+
+### 手动构建
 
 ```bash
 # 项目根目录构建镜像
@@ -270,8 +295,6 @@ docker run -d -p 8080:8781 --name deltaforce-tactical-map deltaforce-tactical-ma
 ```
 
 也可以进入 `Docker/` 目录使用 `docker compose up -d --build`。镜像为多阶段构建（Node 构建 + Node 中继服务器托管），静态站点与分享模式 API（`/api/share`，端口 8781）一体提供。详细说明见 [Docker/README.md](./Docker/README.md)。
-
-CI 推送的镜像地址：`ghcr.io/aeuicey/deltaforce-tacticalpanel:latest`（另带版本号与 commit SHA 标签）。
 
 ## 项目结构
 
