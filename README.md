@@ -14,7 +14,7 @@
 
 ## 与上游仓库的关系
 
-本仓库（[aeuicey/delta-force](https://github.com/aeuicey/DeltaForce-TacticalPanel)）是上游主仓库 [Deng0430/delta-force](https://github.com/Deng0430/delta-force) 的**开发分支（fork）**，双方保持双向同步：
+本仓库（[aeuicey/DeltaForce-TacticalPanel](https://github.com/aeuicey/DeltaForce-TacticalPanel)）是上游主仓库 [Deng0430/delta-force](https://github.com/Deng0430/delta-force) 的**开发分支（fork）**，双方保持双向同步：
 
 - **本分支 → 上游**：新功能与修复先在本分支开发验证，再通过 Pull Request 回馈上游。已被上游采纳的改进包括：Android 导出修复（PR #1）、绘图组件锁定（PR #3，上游在其基础上重构进了正式版）、套索锁定保护（PR #4）。
 - **上游 → 本分支**：上游正式版（当前 v0.1.0）的内容会合并回本分支。2026-08 已完成 v0.1.0 合并，本分支因此同时具备**上游全部正式功能**（刷新载具、分层兵棋、阶段/回合、部署备注、指南针等）与**本分支独占功能**（网页分享模式、Android 局域网协作、开屏视频、高阶菜单等）。
@@ -332,7 +332,7 @@ mindmap
 
 感谢 [@aeuicey](https://github.com/aeuicey) 基于上游项目开发联网协作版本（即本仓库）：
 
-- 项目地址：[aeuicey/delta-force](https://github.com/aeuicey/DeltaForce-TacticalPanel)
+- 项目地址：[aeuicey/DeltaForce-TacticalPanel](https://github.com/aeuicey/DeltaForce-TacticalPanel)
 - 开发方向：多人联网协作与在线战术编辑。
 - 当前状态：测试中。
 
