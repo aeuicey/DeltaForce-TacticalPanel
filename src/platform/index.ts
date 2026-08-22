@@ -11,6 +11,7 @@ function capacitorBridge(): CapacitorBridge | undefined {
 
 function detectPlatformKind(): PlatformKind {
   const demoParams = new URLSearchParams(window.location.search)
+  if (import.meta.env.DEV && demoParams.get('platformDemo') === 'android') return 'android'
   if (demoParams.get('cinematicDemoFrame') === '1' && demoParams.get('platformDemo') === 'android') return 'android'
   const capacitor = capacitorBridge()
   if (capacitor?.getPlatform?.() === 'android') return 'android'
