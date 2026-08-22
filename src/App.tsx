@@ -573,15 +573,32 @@ export default function App() {
   // 移动端协作访客（手机浏览器访问主机）：自动切换移动端操作逻辑（触控桥接）并提示
   // 网页端自动识别移动端（含协作/分享访客与普通访问）：检测到移动端即切换触控操作逻辑并提示
   const mobileVisitor = platform.kind === 'web' && (device.coarsePointer || device.mobileLayout)
+  // 竖屏时优先弹出全屏横屏提示，「继续访问」关闭后才提示移动端操作逻辑
+  const [landscapePromptDismissed, setLandscapePromptDismissed] = useState(false)
+  const showLandscapePrompt = mobileVisitor && device.portrait && !landscapePromptDismissed
   const mobileVisitorNotifiedRef = useRef(false)
   useEffect(() => {
     if (!mobileVisitor) {
       mobileVisitorNotifiedRef.current = false
       return
     }
-    if (mobileVisitorNotifiedRef.current) return
+    if (mobileVisitorNotifiedRef.current || showLandscapePrompt) return
     mobileVisitorNotifiedRef.current = true
     setLanFlash((current) => ({ msg: '检测到移动端访问，已切换移动端操作模式', key: current.key + 1 }))
+  }, [mobileVisitor, showLandscapePrompt])
+
+  // 移动端浏览器手势屏蔽：拦截 iOS 捏合缩放手势（gesturestart 系），防止干扰地图操作
+  useEffect(() => {
+    if (!mobileVisitor) return
+    const suppress = (event: Event) => event.preventDefault()
+    document.addEventListener('gesturestart', suppress)
+    document.addEventListener('gesturechange', suppress)
+    document.addEventListener('gestureend', suppress)
+    return () => {
+      document.removeEventListener('gesturestart', suppress)
+      document.removeEventListener('gesturechange', suppress)
+      document.removeEventListener('gestureend', suppress)
+    }
   }, [mobileVisitor])
 
   /** 校验并应用远端整份快照（与 loadState 同款 normalize；非法数据直接忽略）。 */
@@ -3971,7 +3988,7 @@ export default function App() {
   }, [activeModeMap, capturedStageIndex, handleSelectModeStage, mapId, stages, updateMap])
 
   return (
-    <div className={`app platform-${device.platform} ${device.mobileLayout ? 'mobile-layout' : 'desktop-layout'} ${ui.paletteOpen ? 'left-panel-open' : 'left-panel-closed'} ${demoReadOnly ? 'demo-readonly' : ''} ${isCinematicMapOnly ? 'cinematic-map-only' : ''} ${isCinematicLayerTour ? 'cinematic-layer-tour' : ''} ${isCinematicBattleCompare ? `cinematic-battle-${cinematicDemoStage?.toLowerCase()}` : ''} ${isCinematicC1Highlight ? `cinematic-c1-${cinematicDemoStage?.toLowerCase()}` : ''} ${platform.kind === 'android' && splashDone ? 'app-fade-in' : ''}`} style={{ '--left-panel-width': `${ui.leftPanelWidth}px` } as CSSProperties}>
+    <div className={`app platform-${device.platform} ${device.mobileLayout ? 'mobile-layout' : 'desktop-layout'} ${mobileVisitor ? 'web-mobile' : ''} ${ui.paletteOpen ? 'left-panel-open' : 'left-panel-closed'} ${demoReadOnly ? 'demo-readonly' : ''} ${isCinematicMapOnly ? 'cinematic-map-only' : ''} ${isCinematicLayerTour ? 'cinematic-layer-tour' : ''} ${isCinematicBattleCompare ? `cinematic-battle-${cinematicDemoStage?.toLowerCase()}` : ''} ${isCinematicC1Highlight ? `cinematic-c1-${cinematicDemoStage?.toLowerCase()}` : ''} ${platform.kind === 'android' && splashDone ? 'app-fade-in' : ''}`} style={{ '--left-panel-width': `${ui.leftPanelWidth}px` } as CSSProperties}>
       <Toolbar
         mapId={mapId}
         onMapId={demoReadOnly ? () => {} : setMapId}
@@ -4016,6 +4033,19 @@ export default function App() {
         onResetSplashVideo={platform.kind === 'android' ? handleResetSplashVideo : undefined}
         cinematicModeSwitch={isCinematicModeSwitch}
       />
+      {/* 移动端竖屏全屏提示：优先于一切其他提示，「继续访问」后不再打扰（本会话内） */}
+      {showLandscapePrompt ? (
+        <div className="landscape-prompt" role="alertdialog" aria-label="横屏提示">
+          <div className="landscape-prompt-card">
+            <i className="fa-solid fa-mobile-screen landscape-prompt-icon" aria-hidden="true" />
+            <div className="landscape-prompt-title">横屏访问体验更佳</div>
+            <div className="landscape-prompt-desc">本工具为地图操作设计，建议旋转设备至横屏使用</div>
+            <button type="button" className="tb-primary" onClick={() => setLandscapePromptDismissed(true)}>
+              继续访问
+            </button>
+          </div>
+        </div>
+      ) : null}
       {lanVisitor ? (
         lanBannerDismissed ? (
           // 关闭后收缩为 toolbar 下方缓慢闪烁光条（演示=橙色 / 协作=绿色）

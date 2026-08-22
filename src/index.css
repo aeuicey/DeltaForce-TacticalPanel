@@ -6260,6 +6260,21 @@ body {
   width: auto;
 }
 
+/* 群组锁定按钮：锁定/解锁图标右上角的小圆点角标（复用按钮配色 currentColor） */
+.edit-grouplock-trigger {
+  position: relative;
+}
+
+.edit-grouplock-trigger .edit-grouplock-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  display: block;
+  pointer-events: none;
+}
+
 /* 绘制操作轻量提示（锁定图形被删除/擦除时）：底部居中，2 秒自动消失 */
 .draw-toast {
   position: fixed;
@@ -9684,9 +9699,64 @@ body {
 .edit-unlock-trigger { color: #9dffc9; border: 1px solid #01ff84; }
 .edit-unlock-trigger:hover { color: #0e1112; background: #01ff84; box-shadow: 0 0 9px rgba(1, 255, 132, .8); }
 .edit-lock-trigger svg, .edit-unlock-trigger svg { display: block; }
+.edit-grouplock-trigger { position: relative; }
+.edit-grouplock-trigger .edit-grouplock-badge { position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; display: block; pointer-events: none; }
 .draw-toast {
   position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 5000;
   padding: 8px 18px; color: #ffe1a8; background: rgba(14, 17, 18, .96);
   border: 1px solid #e6a23c; border-radius: 4px; box-shadow: 0 2px 10px rgba(0, 0, 0, .55);
   font-size: 13px; line-height: 1.5; white-space: nowrap; pointer-events: none;
+}
+
+/* 移动端竖屏全屏提示（网页端，优先于其他提示） */
+.landscape-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 11, 16, 0.96);
+}
+
+.landscape-prompt-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 32px;
+  max-width: 320px;
+  text-align: center;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+}
+
+.landscape-prompt-icon {
+  font-size: 42px;
+  color: var(--gold);
+  transform: rotate(90deg);
+}
+
+.landscape-prompt-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--tx-0);
+}
+
+.landscape-prompt-desc {
+  font-size: 13px;
+  color: var(--tx-3);
+}
+
+/* 移动端浏览器手势屏蔽（防止下拉刷新/长按选择/页面缩放干扰地图操作） */
+.platform-web.web-mobile {
+  overscroll-behavior: none;
+}
+
+.platform-web.web-mobile .leaflet-container {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }

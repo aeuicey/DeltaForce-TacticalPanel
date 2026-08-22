@@ -30,6 +30,10 @@ const CLICK_DRAG_THRESHOLD_PX = 5
 /** 锁定图形被删除/擦除时的提示文案 */
 const LOCKED_TOAST_MSG = '该图样已经锁定，请解锁后再删除'
 const LOCKED_MOVE_TOAST_MSG = '存在图形处于锁定状态，请先解锁'
+/** 群组锁定图形被更改时的提示文案（与单独锁定区分） */
+const GROUP_LOCKED_TOAST_MSG = '请先解除群组锁定'
+/** 套索群组锁定时命中已单独锁定图形的提示文案 */
+const GROUP_LOCK_BLOCKED_TOAST_MSG = '存在已单独锁定的图形，请先解除其锁定'
 
 // 锁定/解锁图标（美术资源/锁定.svg、解锁.svg，iconfont 1024×1024 填充式；
 // gizmo 浮动按钮为 Leaflet DOM，只能以 innerHTML 内联 SVG 字符串注入）。
@@ -45,7 +49,11 @@ const LOCK_ICON_SVG = `<svg viewBox="160 90 700 851" width="13" height="16" fill
 const UNLOCK_ICON_SVG = `<svg viewBox="160 90 700 851" width="13" height="16" fill="currentColor" aria-hidden="true"><path d="${LOCK_BODY_PATH}"/><path d="${UNLOCK_SHACKLE_PATH}"/></svg>`
 // 上游 lockIcon 帮助函数：底层复用上方裁剪 viewBox 的内联 SVG（保持锁定图标视觉尺寸一致）
 const lockIcon = (unlock = false) => (unlock ? UNLOCK_ICON_SVG : LOCK_ICON_SVG)
+// 群组锁定角标：叠加在锁定/解锁图标右上角的小圆点（inline SVG，随按钮 currentColor 着色）
+const GROUP_BADGE_SVG = '<svg class="edit-grouplock-badge" viewBox="0 0 10 10" width="8" height="8" fill="currentColor" aria-hidden="true"><circle cx="5" cy="5" r="4.2"/></svg>'
 const featureKeyOf = (p: Record<string, unknown>) => String(p.group || p.uid || '')
+/** 统一锁定判定：单独锁定（locked）或群组锁定（lockGroup 非空）均视为锁定 */
+const isFeatureLocked = (p: Record<string, unknown>) => p.locked === true || Boolean(p.lockGroup)
 
 function offsetGeoCoordinates(value: unknown, dLng: number, dLat: number): unknown {
   if (!Array.isArray(value)) return value
@@ -358,6 +366,8 @@ function ensureProps(feature: Feature): Record<string, unknown> {
   if (p.group && p.uid === p.group) p.uid = genUid('draw')
   // 锁定标记默认 false：锁定图形不可移动/编辑/删除（选中框只留"解锁"按钮）
   if (p.locked == null) p.locked = false
+  // 群组锁定标记默认 null：非空时该图形属于某个锁定群组，整组不可单独编辑
+  if (p.lockGroup == null) p.lockGroup = null
   return p
 }
 
@@ -640,8 +650,7 @@ export default function LayerManager({
   const gizmoRefreshFrameRef = useRef<number | null>(null)
   const scheduleGizmoRefreshRef = useRef<() => void>(() => {})
   const lassoBoxBtnRef = useRef<L.Marker | null>(null)
-  const selectionHasLockedRef = useRef<() => boolean>(() => false)
-  const setLassoLockedRef = useRef<(locked: boolean) => void>(() => {})
+  const setLassoGroupLockRef = useRef<(lock: boolean) => void>(() => {})
   const setKeyLockedRef = useRef<(key: string, locked: boolean) => void>(() => {})
   const drawClipboardRef = useRef<Feature[]>([])
   useEffect(() => () => { if (toastTimerRef.current != null) window.clearTimeout(toastTimerRef.current) }, [])
@@ -649,12 +658,30 @@ export default function LayerManager({
     const keys = new Set<string>()
     fgRef.current?.eachLayer((layer) => {
       const p = ((layer as AnyWithFeature).feature?.properties ?? {}) as Record<string, unknown>
-      if (p.locked === true) keys.add(featureKeyOf(p))
+      // 单独锁定与群组锁定统一收集：键为图形逻辑键（group||uid），群组锁定额外收集 lockGroup ID，
+      // 拦截点双查（featureKeyOf 或 lockGroup 命中集合即视为锁定）。
+      if (isFeatureLocked(p)) {
+        keys.add(featureKeyOf(p))
+        if (p.lockGroup) keys.add(String(p.lockGroup))
+      }
     })
     return keys
   }, [])
   const lockedKeysRef = useRef(lockedKeys)
   lockedKeysRef.current = lockedKeys
+
+  /** 判定一组逻辑键是否含群组锁定图形（用于区分拦截文案：群组锁定 vs 单独锁定） */
+  const keysGroupLocked = useCallback((keys: Iterable<string>): boolean => {
+    const set = new Set(keys)
+    let group = false
+    fgRef.current?.eachLayer((layer) => {
+      const p = ((layer as AnyWithFeature).feature?.properties ?? {}) as Record<string, unknown>
+      if (p.lockGroup && (set.has(featureKeyOf(p)) || set.has(String(p.lockGroup)))) group = true
+    })
+    return group
+  }, [])
+  const keysGroupLockedRef = useRef(keysGroupLocked)
+  keysGroupLockedRef.current = keysGroupLocked
 
   const save = useCallback(() => {
     const g = fgRef.current
@@ -785,7 +812,7 @@ export default function LayerManager({
     const container = map.getContainer()
     type AndroidGesture =
       | { kind: 'idle' }
-      | { kind: 'ui'; pointerId: number; button: HTMLElement; action: 'delete' | 'lock'; locked?: boolean; key?: string; lasso?: boolean }
+      | { kind: 'ui'; pointerId: number; button: HTMLElement; action: 'delete' | 'lock'; locked?: boolean; key?: string; group?: boolean; tip?: string; longFired?: boolean; longPressTimer?: number }
       | { kind: 'selection-pending'; pointerId: number; startEvent: PointerEvent; startPoint: L.Point }
       | { kind: 'selection-drag'; pointerId: number }
       | { kind: 'selection-pinch'; pointerIds: Set<number>; committed: boolean }
@@ -877,6 +904,8 @@ export default function LayerManager({
     }
 
     const resetGesture = () => {
+      // 清理 UI 按钮的长按提示定时器（群组锁定按钮长按约 500ms 显示说明）
+      if (gesture.kind === 'ui' && gesture.longPressTimer != null) window.clearTimeout(gesture.longPressTimer)
       for (const pointerId of activePointers.keys()) releasePointer(pointerId)
       for (const pointerId of suppressedPointers) releasePointer(pointerId)
       activePointers.clear()
@@ -976,17 +1005,29 @@ export default function LayerManager({
         claimMapGestures()
         capturePointer(event)
         activePointers.set(event.pointerId, event)
-        gesture = deleteButton
-          ? { kind: 'ui', pointerId: event.pointerId, button: deleteButton, action: 'delete' }
-          : {
-              kind: 'ui',
-              pointerId: event.pointerId,
-              button: lockButton!,
-              action: 'lock',
-              locked: lockButton!.dataset.editLockValue === 'true',
-              key: lockButton!.dataset.editLockKey,
-              lasso: lockButton!.dataset.editLassoLock === 'true',
-            }
+        if (deleteButton) {
+          gesture = { kind: 'ui', pointerId: event.pointerId, button: deleteButton, action: 'delete' }
+        } else {
+          const tip = lockButton!.dataset.editLockTip
+          const uiGesture: Extract<AndroidGesture, { kind: 'ui' }> = {
+            kind: 'ui',
+            pointerId: event.pointerId,
+            button: lockButton!,
+            action: 'lock',
+            locked: lockButton!.dataset.editLockValue === 'true',
+            key: lockButton!.dataset.editLockKey,
+            group: lockButton!.dataset.editLassoLock === 'group',
+            tip,
+          }
+          // 群组锁定按钮：长按约 500ms 显示功能说明（showToast），长按后不触发锁定动作
+          if (tip) {
+            uiGesture.longPressTimer = window.setTimeout(() => {
+              uiGesture.longFired = true
+              showToastRef.current(tip)
+            }, 500)
+          }
+          gesture = uiGesture
+        }
         ownEvent(event)
         return
       }
@@ -1130,13 +1171,15 @@ export default function LayerManager({
       activePointers.delete(event.pointerId)
       releasePointer(event.pointerId)
       if (owner.kind === 'ui' && owner.pointerId === event.pointerId) {
+        if (owner.longPressTimer != null) window.clearTimeout(owner.longPressTimer)
         const hit = document.elementFromPoint(event.clientX, event.clientY)
         const button = hit instanceof Element
           ? hit.closest<HTMLElement>('.edit-delete-trigger, .edit-lock-trigger, .edit-unlock-trigger')
           : null
-        if (button === owner.button && owner.button.isConnected) {
+        // 长按已显示说明提示：本次抬起不触发按钮动作
+        if (!owner.longFired && button === owner.button && owner.button.isConnected) {
           if (owner.action === 'delete') deleteSelected()
-          else if (owner.lasso) setLassoLockedRef.current(Boolean(owner.locked))
+          else if (owner.group) setLassoGroupLockRef.current(Boolean(owner.locked))
           else if (owner.key) setKeyLockedRef.current(owner.key, Boolean(owner.locked))
         }
       } else if (owner.kind === 'selection-drag' || owner.kind === 'handle-drag') {
@@ -1426,6 +1469,7 @@ export default function LayerManager({
 
   // 组扩展（第十二轮修复）：箭头 = 箭杆 + 箭头两个图层（同 group 不同 uid）。
   // 选中任意一个时，把同 group 的其他图层也加入选中，保证移动/删除整体生效。
+  // 群组锁定（lockGroup）同理：点选组内单个图形自动扩展选中整个锁定群组。
   const expandGroupSelection = useCallback(() => {
     const g = fgRef.current
     if (!g) return
@@ -1448,6 +1492,25 @@ export default function LayerManager({
         highlight(u, true)
       }
     })
+    // 锁定群组扩展：任一选中图层带有 lockGroup → 同 lockGroup 的所有图层加入选中
+    const selectedLockGroups = new Set<string>()
+    g.eachLayer((l) => {
+      const fl = l as AnyWithFeature
+      const p = fl.feature?.properties as Record<string, unknown> | undefined
+      if (p && p.lockGroup && selectedRef.current.has(String(p.uid))) selectedLockGroups.add(String(p.lockGroup))
+    })
+    if (selectedLockGroups.size > 0) {
+      g.eachLayer((l) => {
+        const fl = l as AnyWithFeature
+        const p = fl.feature?.properties as Record<string, unknown> | undefined
+        if (!p || !p.lockGroup || !selectedLockGroups.has(String(p.lockGroup))) return
+        const u = String(p.uid)
+        if (!selectedRef.current.has(u)) {
+          selectedRef.current.add(u)
+          highlight(u, true)
+        }
+      })
+    }
   }, [highlight])
 
   // ---- 套索包围矩形（第十五轮：圈中图形后形成矩形区域，区域内按住可整体移动） ----
@@ -1494,17 +1557,21 @@ export default function LayerManager({
       dragMovedRef.current = false
       // 锁定图形不随套索整体移动（避免被连带拖走）
       const locked = lockedKeysRef.current()
-      // 选中集合含锁定图形：整个移动会话不启动，并提示需先解锁
+      // 选中集合含锁定图形：整个移动会话不启动，并提示需先解锁（群组锁定文案区分）
       let hitLocked = false
+      let hitGroupLocked = false
       fgRef.current?.eachLayer((l) => {
         const fl = l as AnyWithFeature
         if (!fl.feature) return
         const fp = fl.feature.properties as Record<string, unknown>
         const u = String(fp.uid)
-        if (selectedRef.current.has(u) && locked.has(String(fp.group ?? u))) hitLocked = true
+        if (selectedRef.current.has(u) && locked.has(String(fp.group ?? u))) {
+          hitLocked = true
+          if (fp.lockGroup) hitGroupLocked = true
+        }
       })
       if (hitLocked) {
-        showToastRef.current(LOCKED_MOVE_TOAST_MSG)
+        showToastRef.current(hitGroupLocked ? GROUP_LOCKED_TOAST_MSG : LOCKED_MOVE_TOAST_MSG)
         return
       }
       const base = new Map<string, unknown>()
@@ -1596,14 +1663,32 @@ export default function LayerManager({
     box.on('click', (e: L.LeafletMouseEvent) => L.DomEvent.stopPropagation(e))
     box.addTo(map)
     lassoBoxRef.current = box
-    const locked = selectionHasLockedRef.current()
+    // 群组锁定按钮（套索群组锁定）：
+    // - 命中集合含群组锁定图形 → 「解除群组锁定」（解锁图标 + 角标）
+    // - 命中 ≥2 个图形组且无群组锁定 → 「作为群组锁定」（锁定图标 + 角标；
+    //   含已单独锁定图形时点击仅提示，不执行）
+    // - 其余（单个图形组）→ 不显示按钮（单图形锁定走普通选中 gizmo 的锁定按钮）
+    const selGroupKeys = new Set<string>()
+    let hasGroupLocked = false
+    fgRef.current?.eachLayer((l) => {
+      const fl = l as AnyWithFeature
+      if (!fl.feature) return
+      const p = fl.feature.properties as Record<string, unknown>
+      if (!selectedRef.current.has(String(p.uid))) return
+      selGroupKeys.add(featureKeyOf(p))
+      if (p.lockGroup) hasGroupLocked = true
+    })
+    const showGroupUnlock = hasGroupLocked
+    const showGroupLock = !hasGroupLocked && selGroupKeys.size >= 2
+    if (!showGroupUnlock && !showGroupLock) return
+    const tip = showGroupUnlock ? '解除群组锁定' : '将选中的图形作为群组锁定，锁定后不可单独编辑'
     const buttonPosition = map.containerPointToLatLng(
       map.latLngToContainerPoint(box.getBounds().getNorthEast()).add([20, -20]),
     )
     const button = L.marker(buttonPosition, {
       icon: L.divIcon({
         className: 'edit-lock-trigger-wrap',
-        html: `<button type="button" class="${locked ? 'edit-unlock-trigger' : 'edit-lock-trigger'}" title="${locked ? '解锁图形' : '锁定图形'}" aria-label="${locked ? '解锁图形' : '锁定图形'}">${lockIcon(locked)}</button>`,
+        html: `<button type="button" class="${showGroupUnlock ? 'edit-unlock-trigger' : 'edit-lock-trigger'} edit-grouplock-trigger" title="${tip}" aria-label="${tip}">${lockIcon(showGroupUnlock)}${GROUP_BADGE_SVG}</button>`,
         iconSize: [30, 26],
         iconAnchor: [15, 13],
       }),
@@ -1619,13 +1704,14 @@ export default function LayerManager({
     button.on('click', (event: L.LeafletMouseEvent) => {
       L.DomEvent.stop(event.originalEvent as MouseEvent)
       L.DomEvent.stopPropagation(event)
-      setLassoLockedRef.current(!selectionHasLockedRef.current())
+      setLassoGroupLockRef.current(showGroupLock)
     })
     button.addTo(map)
     const buttonElement = button.getElement()?.querySelector<HTMLElement>('.edit-lock-trigger, .edit-unlock-trigger')
     if (buttonElement) {
-      buttonElement.dataset.editLassoLock = 'true'
-      buttonElement.dataset.editLockValue = String(!locked)
+      buttonElement.dataset.editLassoLock = 'group'
+      buttonElement.dataset.editLockValue = String(showGroupLock)
+      buttonElement.dataset.editLockTip = tip
     }
     lassoBoxBtnRef.current = button
   }, [map, computeSelectionBounds])
@@ -1634,20 +1720,10 @@ export default function LayerManager({
   const updateLassoBoxRef = useRef(updateLassoBox)
   updateLassoBoxRef.current = updateLassoBox
 
-  const selectionHasLocked = useCallback(() => {
-    const locked = lockedKeysRef.current()
-    let found = false
-    fgRef.current?.eachLayer((layer) => {
-      const item = layer as AnyWithFeature
-      if (!item.feature) return
-      const props = item.feature.properties as Record<string, unknown>
-      if (selectedRef.current.has(String(props.uid)) && locked.has(featureKeyOf(props))) found = true
-    })
-    return found
-  }, [])
-  selectionHasLockedRef.current = selectionHasLocked
-
-  const setLassoLocked = useCallback((locked: boolean) => {
+  // 套索群组锁定（lockGroup）：锁定时为选中集合生成一个群组 ID 写入全部成员
+  // （featureKeyOf 去重后的图形组）；解除时清掉集合内所有 lockGroup。
+  // 操作经 commitDraw 入历史栈（可撤销）。
+  const toggleLassoGroupLock = useCallback((lock: boolean) => {
     const selectedKeys = new Set<string>()
     fgRef.current?.eachLayer((layer) => {
       const item = layer as AnyWithFeature
@@ -1656,23 +1732,38 @@ export default function LayerManager({
       if (selectedRef.current.has(String(props.uid))) selectedKeys.add(featureKeyOf(props))
     })
     if (selectedKeys.size === 0) return
+    if (lock) {
+      // 命中集合含已单独锁定的图形：仅提示，不执行群组锁定
+      let hasIndividuallyLocked = false
+      fgRef.current?.eachLayer((layer) => {
+        const item = layer as AnyWithFeature
+        if (!item.feature) return
+        const props = item.feature.properties as Record<string, unknown>
+        if (selectedKeys.has(featureKeyOf(props)) && props.locked === true) hasIndividuallyLocked = true
+      })
+      if (hasIndividuallyLocked) {
+        showToastRef.current(GROUP_LOCK_BLOCKED_TOAST_MSG)
+        return
+      }
+    }
     const before = snapshotNow()
+    const lockGroup = lock ? genUid('lockgrp') : null
     let changed = false
     fgRef.current?.eachLayer((layer) => {
       const item = layer as AnyWithFeature
       if (!item.feature) return
       const props = item.feature.properties as Record<string, unknown>
-      if (selectedKeys.has(featureKeyOf(props)) && props.locked !== locked) {
-        props.locked = locked
+      if (!selectedKeys.has(featureKeyOf(props))) return
+      if (props.lockGroup !== lockGroup) {
+        props.lockGroup = lockGroup
         changed = true
       }
     })
     if (!changed) return
-    if (locked) closeSelPanelRef.current(false)
     commitDraw(before)
     updateLassoBoxRef.current()
   }, [snapshotNow, commitDraw])
-  setLassoLockedRef.current = setLassoLocked
+  setLassoGroupLockRef.current = toggleLassoGroupLock
 
   const clearSelection = useCallback(() => {
     for (const uid of selectedRef.current) highlight(uid, false)
@@ -1704,6 +1795,8 @@ export default function LayerManager({
         const before = snapshotNow()
         const current = JSON.parse(before) as FeatureCollection
         const groupIds = new Map<string, string>()
+        // 群组锁定 ID 仿 group 重映射：同一批粘贴的副本共享新 lockGroup，不与原图共享锁定组
+        const lockGroupIds = new Map<string, string>()
         const pasted = drawClipboardRef.current.map((source) => {
           const feature = structuredClone(source)
           const properties = { ...(feature.properties as Record<string, unknown> | null) }
@@ -1712,6 +1805,11 @@ export default function LayerManager({
           if (oldGroup) {
             if (!groupIds.has(oldGroup)) groupIds.set(oldGroup, genUid('copy_group'))
             properties.group = groupIds.get(oldGroup)
+          }
+          const oldLockGroup = String(properties.lockGroup ?? '')
+          if (oldLockGroup) {
+            if (!lockGroupIds.has(oldLockGroup)) lockGroupIds.set(oldLockGroup, genUid('lockgrp'))
+            properties.lockGroup = lockGroupIds.get(oldLockGroup)
           }
           feature.properties = properties
           if ('coordinates' in feature.geometry) {
@@ -1784,6 +1882,7 @@ export default function LayerManager({
     if (hasDraw && g) {
       const locked = lockedKeysRef.current()
       let blocked = false
+      let blockedGroup = false
       const doomed: AnyWithFeature[] = []
       g.eachLayer((l) => {
         const fl = l as AnyWithFeature
@@ -1791,10 +1890,14 @@ export default function LayerManager({
         const u = String(fp.uid)
         const grp = String(fp.group ?? '')
         if (!(selectedRef.current.has(u) || (grp && selectedRef.current.has(grp)))) return
-        if (locked.has(featureKeyOf(fp))) { blocked = true; return }
+        if (locked.has(featureKeyOf(fp))) {
+          blocked = true
+          if (fp.lockGroup) blockedGroup = true
+          return
+        }
         doomed.push(fl)
       })
-      if (blocked) showToast(LOCKED_TOAST_MSG)
+      if (blocked) showToast(blockedGroup ? GROUP_LOCKED_TOAST_MSG : LOCKED_TOAST_MSG)
       for (const d of doomed) {
         const u = String((d.feature?.properties as Record<string, unknown>)?.uid ?? '')
         selectedRef.current.delete(u)
@@ -1850,10 +1953,12 @@ export default function LayerManager({
     if (!g) return
     const locked = lockedKeysRef.current()
     const doomed: AnyWithFeature[] = []
+    let keptGroupLocked = false
     g.eachLayer((layer) => {
       const item = layer as AnyWithFeature
       const p = (item.feature?.properties ?? {}) as Record<string, unknown>
       if (item.feature && !locked.has(featureKeyOf(p))) doomed.push(item)
+      else if (item.feature && p.lockGroup) keptGroupLocked = true
     })
     if (doomed.length > 0) {
       const before = snapshotNow()
@@ -1868,7 +1973,7 @@ export default function LayerManager({
       buildGizmoRef.current()
       notifySelection()
     }
-    if (locked.size > 0) showToast(LOCKED_TOAST_MSG)
+    if (locked.size > 0) showToast(keptGroupLocked ? GROUP_LOCKED_TOAST_MSG : LOCKED_TOAST_MSG)
   }, [clearDrawTick, snapshotNow, commitDraw, highlight, notifySelection, showToast])
 
   /** 删除图形（橡皮擦）：箭头按 group 整体删除（问题4；重构：上报 App 入历史栈） */
@@ -1878,7 +1983,7 @@ export default function LayerManager({
       if (!g) return
       const props = (layer.feature?.properties ?? {}) as Record<string, unknown>
       const key = featureKeyOf(props)
-      if (lockedKeysRef.current().has(key)) { showToast(LOCKED_TOAST_MSG); return }
+      if (lockedKeysRef.current().has(key)) { showToast(props.lockGroup ? GROUP_LOCKED_TOAST_MSG : LOCKED_TOAST_MSG); return }
       const before = snapshotNow()
       const doomed: AnyWithFeature[] = []
       g.eachLayer((l) => {
@@ -2702,12 +2807,12 @@ export default function LayerManager({
     }[] = []
     let strokeLiveLayers = new Set<L.Layer>()
     // 锁定图形不参与擦除；每轮擦除（按下→抬起）命中锁定图形时只提示一次
-    let strokeLockedSources: { points: L.LatLng[] }[] = []
+    let strokeLockedSources: { points: L.LatLng[]; group: boolean }[] = []
     let lockedEraseNotified = false
-    const notifyLockedErase = () => {
+    const notifyLockedErase = (groupLocked = false) => {
       if (lockedEraseNotified) return
       lockedEraseNotified = true
-      showToastRef.current(LOCKED_TOAST_MSG)
+      showToastRef.current(groupLocked ? GROUP_LOCKED_TOAST_MSG : LOCKED_TOAST_MSG)
     }
 
     // 收集图形所有顶点对应的容器坐标
@@ -2759,17 +2864,20 @@ export default function LayerManager({
     }
 
     const eraseWholeAt = (pt: L.Point) => {
+      const hitProps = new Map<string, Record<string, unknown>>()
       const keys = new Set(hitTest(pt).map((d) => {
         const p = (d.feature?.properties ?? {}) as Record<string, unknown>
-        return featureKeyOf(p)
+        const k = featureKeyOf(p)
+        hitProps.set(k, p)
+        return k
       }))
       if (keys.size === 0) return
-      // 锁定图形整组跳过，并提示一次
+      // 锁定图形整组跳过，并提示一次（群组锁定文案区分）
       const locked = lockedKeysRef.current()
       for (const k of [...keys]) {
         if (locked.has(k)) {
           keys.delete(k)
-          notifyLockedErase()
+          notifyLockedErase(Boolean(hitProps.get(k)?.lockGroup))
         }
       }
       if (keys.size === 0) return
@@ -2870,7 +2978,7 @@ export default function LayerManager({
             return trail.some((trailPoint) => pixel.distanceTo(trailPoint) <= ERASE_R)
           })
           if (hitLocked) {
-            notifyLockedErase()
+            notifyLockedErase(entry.group)
             break
           }
         }
@@ -2896,7 +3004,7 @@ export default function LayerManager({
           const p = (layer.feature?.properties ?? {}) as Record<string, unknown>
           // 锁定图形不参与笔迹裁断，只记录用于触碰提示
           if (locked.has(String(p.group ?? p.uid ?? ''))) {
-            strokeLockedSources.push({ points: flatLatLngs(layer).map((ll) => L.latLng(ll.lat, ll.lng)) })
+            strokeLockedSources.push({ points: flatLatLngs(layer).map((ll) => L.latLng(ll.lat, ll.lng)), group: Boolean(p.lockGroup) })
             return
           }
           strokeSources.push({
@@ -3825,12 +3933,17 @@ export default function LayerManager({
   const setKeyLocked = useCallback((key: string, locked: boolean) => {
     const targets = targetLayersOf(key)
     if (targets.length === 0) return
-    const current = targets.some((target) => target.feature?.properties?.locked === true)
+    const current = targets.some((target) => {
+      const p = (target.feature?.properties ?? {}) as Record<string, unknown>
+      return isFeatureLocked(p)
+    })
     if (current === locked) return
     const before = snapshotNow()
     targets.forEach((target) => {
       const p = (target.feature?.properties ?? {}) as Record<string, unknown>
       p.locked = locked
+      // 解锁时一并解除群组锁定（单成员锁定群组等异常数据的兜底，避免无法解锁）
+      if (!locked) p.lockGroup = null
     })
     if (locked) closeSelPanelRef.current(false)
     commitDraw(before)
@@ -3850,7 +3963,7 @@ export default function LayerManager({
     if (layers.length === 0) return
     const single = keys.length === 1
     const first = layers[0]
-    const lockedSel = single && layers.some((layer) => layer.feature?.properties?.locked === true)
+    const lockedSel = single && layers.some((layer) => isFeatureLocked((layer.feature?.properties ?? {}) as Record<string, unknown>))
     const props = (first.feature?.properties ?? {}) as Record<string, unknown>
     const isCircle = props.type === 'circle'
     const isText = props.type === 'text'
@@ -4171,6 +4284,19 @@ export default function LayerManager({
           highlight(u, false)
         }
       }
+      // 群组锁定：点选组内单个图形自动扩展选中整个锁定群组（Canva 式整组选中）
+      const lockGroup = String((layers[0]?.feature?.properties as Record<string, unknown> | undefined)?.lockGroup ?? '')
+      if (lockGroup) {
+        fgRef.current?.eachLayer((l) => {
+          const p = ((l as AnyWithFeature).feature?.properties ?? {}) as Record<string, unknown>
+          if (String(p.lockGroup ?? '') !== lockGroup) return
+          const u = String(p.uid ?? '')
+          if (!selectedRef.current.has(u)) {
+            selectedRef.current.add(u)
+            highlight(u, false)
+          }
+        })
+      }
       interactRef.current = null
       notifySelection()
       if (platform.kind === 'android') scheduleGizmoRefreshRef.current()
@@ -4222,7 +4348,13 @@ export default function LayerManager({
   const startBodyMove = useCallback(
     (key: string, e: L.LeafletMouseEvent) => {
       const locked = lockedKeysRef.current()
-      const keys = selectedKeys().filter((item) => !locked.has(item))
+      const allKeys = selectedKeys()
+      const blockedKeys = allKeys.filter((item) => locked.has(item))
+      const keys = allKeys.filter((item) => !locked.has(item))
+      // 选中集合含锁定图形：提示需先解锁（群组锁定文案区分）
+      if (blockedKeys.length > 0) {
+        showToastRef.current(keysGroupLockedRef.current(blockedKeys) ? GROUP_LOCKED_TOAST_MSG : LOCKED_MOVE_TOAST_MSG)
+      }
       const layers = layersOfKeys(keys)
       if (layers.length === 0) return
       interactRef.current = {
@@ -4258,7 +4390,12 @@ export default function LayerManager({
   const startHandleDrag = useCallback(
     (kind: string, keys: string[], e: L.LeafletMouseEvent) => {
       const locked = lockedKeysRef.current()
+      const blockedKeys = keys.filter((item) => locked.has(item))
       keys = keys.filter((item) => !locked.has(item))
+      // 选中集合含锁定图形：提示需先解锁（群组锁定文案区分）
+      if (blockedKeys.length > 0) {
+        showToastRef.current(keysGroupLockedRef.current(blockedKeys) ? GROUP_LOCKED_TOAST_MSG : LOCKED_MOVE_TOAST_MSG)
+      }
       const layers = layersOfKeys(keys)
       if (layers.length === 0) return
       const first = layers[0]
@@ -4341,9 +4478,14 @@ export default function LayerManager({
     if (platform.kind !== 'android' && !touchBridge) return false
     // 结束第一根手指刚建立的普通点击/拖动候选会话，再切换为双指缩放。
     finishShapePointerRef.current()
-    // 锁定图形不参与捏合缩放
+    // 锁定图形不参与捏合缩放（群组锁定文案区分）
     const locked = lockedKeysRef.current()
-    const keys = selectedKeys().filter((k) => !locked.has(k))
+    const allPinchKeys = selectedKeys()
+    const blockedPinchKeys = allPinchKeys.filter((k) => locked.has(k))
+    const keys = allPinchKeys.filter((k) => !locked.has(k))
+    if (blockedPinchKeys.length > 0) {
+      showToastRef.current(keysGroupLockedRef.current(blockedPinchKeys) ? GROUP_LOCKED_TOAST_MSG : LOCKED_MOVE_TOAST_MSG)
+    }
     const layers = layersOfKeys(keys)
     if (layers.length === 0) return false
     const startDistance = a.distanceTo(b)

@@ -321,29 +321,15 @@
 }
 
 .mobile-layout .edit-style-trigger,
-.mobile-layout .edit-delete-trigger {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
-  font-size: 14px;
-  touch-action: manipulation;
-}
-
+.mobile-layout .edit-delete-trigger,
 .mobile-layout .edit-lock-trigger,
 .mobile-layout .edit-unlock-trigger {
-  width: 36px;
-  height: 34px;
-  font-size: 14px;
-  touch-action: manipulation;
-}
-
-.platform-android.mobile-layout .edit-lock-trigger,
-.platform-android.mobile-layout .edit-unlock-trigger {
   width: 44px;
   height: 44px;
   min-width: 44px;
   min-height: 44px;
+  font-size: 14px;
+  touch-action: manipulation;
 }
 
 .mobile-layout .text-editor {
