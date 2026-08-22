@@ -2,13 +2,13 @@
 # 三角洲战术地图 一键部署脚本（远程机器只需 Docker，无需克隆仓库）
 #
 # 用法（一行命令）：
-#   curl -fsSL https://raw.githubusercontent.com/aeuicey/delta-force/main/Docker/deploy.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/aeuicey/DeltaForce-TacticalPanel/main/Docker/deploy.sh | bash
 # 可选参数：
-#   PORT=8080 IMAGE=ghcr.io/aeuicey/delta-force:latest bash deploy.sh
+#   PORT=8080 IMAGE=ghcr.io/aeuicey/deltaforce-tacticalpanel:latest bash deploy.sh
 
 set -e
 
-IMAGE="${IMAGE:-ghcr.io/aeuicey/delta-force:latest}"
+IMAGE="${IMAGE:-ghcr.io/aeuicey/deltaforce-tacticalpanel:latest}"
 PORT="${PORT:-8080}"
 NAME="deltaforce-tactical-map"
 

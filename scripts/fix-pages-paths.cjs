@@ -5,14 +5,14 @@
 // Pages 部署在 /<仓库名>/ 子路径下，这些请求会打到域名根而 404。
 // 本脚本在 vite build 之后扫描 dist 产物，把字符串字面量里的绝对路径补上 base 前缀。
 //
-// 用法：node scripts/fix-pages-paths.cjs <base>   例：node scripts/fix-pages-paths.cjs /delta-force
+// 用法：node scripts/fix-pages-paths.cjs <base>   例：node scripts/fix-pages-paths.cjs /DeltaForce-TacticalPanel
 
 const fs = require('node:fs')
 const path = require('node:path')
 
 const base = process.argv[2]
 if (!base || !base.startsWith('/')) {
-  console.error('用法: node scripts/fix-pages-paths.cjs <base，如 /delta-force>')
+  console.error('用法: node scripts/fix-pages-paths.cjs <base，如 /DeltaForce-TacticalPanel>')
   process.exit(1)
 }
 const prefix = base.endsWith('/') ? base.slice(0, -1) : base

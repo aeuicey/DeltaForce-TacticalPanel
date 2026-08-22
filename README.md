@@ -3,10 +3,10 @@
   <h1>三角洲战术地图</h1>
   <p>面向《三角洲行动》全面战场的地图标注、兵棋推演与战术方案编辑工具。</p>
   <p>
-    <a href="https://github.com/aeuicey/delta-force/actions/workflows/deploy.yml"><img src="https://github.com/aeuicey/delta-force/actions/workflows/deploy.yml/badge.svg" alt="Deploy Status" /></a>
-    <a href="https://aeuicey.github.io/delta-force/"><img src="https://img.shields.io/badge/Demo-GitHub%20Pages-01ff84" alt="GitHub Pages Demo" /></a>
-    <a href="https://github.com/aeuicey/delta-force/releases"><img src="https://img.shields.io/badge/Android-APK%20Release-blue" alt="APK Release" /></a>
-    <a href="https://github.com/aeuicey/delta-force/pkgs/container/delta-force"><img src="https://img.shields.io/badge/Docker-ghcr.io%2Faeuicey%2Fdelta--force-2496ED?logo=docker&logoColor=white" alt="GitHub Package" /></a>
+    <a href="https://github.com/aeuicey/DeltaForce-TacticalPanel/actions/workflows/deploy.yml"><img src="https://github.com/aeuicey/DeltaForce-TacticalPanel/actions/workflows/deploy.yml/badge.svg" alt="Deploy Status" /></a>
+    <a href="https://aeuicey.github.io/DeltaForce-TacticalPanel/"><img src="https://img.shields.io/badge/Demo-GitHub%20Pages-01ff84" alt="GitHub Pages Demo" /></a>
+    <a href="https://github.com/aeuicey/DeltaForce-TacticalPanel/releases"><img src="https://img.shields.io/badge/Android-APK%20Release-blue" alt="APK Release" /></a>
+    <a href="https://github.com/aeuicey/DeltaForce-TacticalPanel/pkgs/container/DeltaForce-TacticalPanel"><img src="https://img.shields.io/badge/Docker-ghcr.io%2Faeuicey%2Fdeltaforce--tacticalpanel-2496ED?logo=docker&logoColor=white" alt="GitHub Package" /></a>
   </p>
 </div>
 
@@ -14,7 +14,7 @@
 
 ## 与上游仓库的关系
 
-本仓库（[aeuicey/delta-force](https://github.com/aeuicey/delta-force)）是上游主仓库 [Deng0430/delta-force](https://github.com/Deng0430/delta-force) 的**开发分支（fork）**，双方保持双向同步：
+本仓库（[aeuicey/delta-force](https://github.com/aeuicey/DeltaForce-TacticalPanel)）是上游主仓库 [Deng0430/delta-force](https://github.com/Deng0430/delta-force) 的**开发分支（fork）**，双方保持双向同步：
 
 - **本分支 → 上游**：新功能与修复先在本分支开发验证，再通过 Pull Request 回馈上游。已被上游采纳的改进包括：Android 导出修复（PR #1）、绘图组件锁定（PR #3，上游在其基础上重构进了正式版）、套索锁定保护（PR #4）。
 - **上游 → 本分支**：上游正式版（当前 v0.1.0）的内容会合并回本分支。2026-08 已完成 v0.1.0 合并，本分支因此同时具备**上游全部正式功能**（刷新载具、分层兵棋、阶段/回合、部署备注、指南针等）与**本分支独占功能**（网页分享模式、Android 局域网协作、开屏视频、高阶菜单等）。
@@ -241,7 +241,7 @@ main 分支每次有新提交，GitHub Actions 自动完成：Pages 部署、Win
 
 | 版本 | 获取方式 | 说明 |
 | --- | --- | --- |
-| **纯静态版**（GitHub Pages / Windows 桌面端） | 浏览器访问 <https://aeuicey.github.io/delta-force/>；或 Releases 下载 `desktop-v*-b*` 的 `deltaforce-tactical-map-*-setup.exe` | 同一份构建产物：打开即用、无需服务器。桌面端为 Electron 壳（内置静态服务器），支持离线使用与本地数据保存。**不含**分享模式（无中继服务器） |
+| **纯静态版**（GitHub Pages / Windows 桌面端） | 浏览器访问 <https://aeuicey.github.io/DeltaForce-TacticalPanel/>；或 Releases 下载 `desktop-v*-b*` 的 `deltaforce-tactical-map-*-setup.exe` | 同一份构建产物：打开即用、无需服务器。桌面端为 Electron 壳（内置静态服务器），支持离线使用与本地数据保存。**不含**分享模式（无中继服务器） |
 | **网页版**（完整功能，需服务器） | `npm run share:server` 本地启动，或 Docker 一键部署（见下文） | 在纯静态版基础上多出**分享模式**（随机链接、访客昵称统计、实时同步、过期失效），功能最完整 |
 | **手机版**（Android APK） | Releases 下载 `android-v*-b*` 的 APK | 固定横屏触控优化，独占**局域网协作**（演示/协作双模式、同步视角）与**开屏视频** |
 
@@ -254,7 +254,7 @@ main 分支每次有新提交，GitHub Actions 自动完成：Pages 部署、Win
 **一键部署（推荐）**：每次提交后 GitHub Actions 自动构建镜像推送到 GHCR，远程机器只需安装 Docker，一行命令完成部署：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aeuicey/delta-force/main/Docker/deploy.sh | bash
+curl -fsSL https://raw.githubusercontent.com/aeuicey/DeltaForce-TacticalPanel/main/Docker/deploy.sh | bash
 # 访问 http://<远程机器IP>:8080/（PORT=端口 可自定义）
 ```
 
@@ -271,7 +271,7 @@ docker run -d -p 8080:8781 --name deltaforce-tactical-map deltaforce-tactical-ma
 
 也可以进入 `Docker/` 目录使用 `docker compose up -d --build`。镜像为多阶段构建（Node 构建 + Node 中继服务器托管），静态站点与分享模式 API（`/api/share`，端口 8781）一体提供。详细说明见 [Docker/README.md](./Docker/README.md)。
 
-CI 推送的镜像地址：`ghcr.io/aeuicey/delta-force:latest`（另带版本号与 commit SHA 标签）。
+CI 推送的镜像地址：`ghcr.io/aeuicey/deltaforce-tacticalpanel:latest`（另带版本号与 commit SHA 标签）。
 
 ## 项目结构
 
@@ -332,7 +332,7 @@ mindmap
 
 感谢 [@aeuicey](https://github.com/aeuicey) 基于上游项目开发联网协作版本（即本仓库）：
 
-- 项目地址：[aeuicey/delta-force](https://github.com/aeuicey/delta-force)
+- 项目地址：[aeuicey/delta-force](https://github.com/aeuicey/DeltaForce-TacticalPanel)
 - 开发方向：多人联网协作与在线战术编辑。
 - 当前状态：测试中。
 

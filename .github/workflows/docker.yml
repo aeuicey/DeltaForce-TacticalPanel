@@ -1,7 +1,7 @@
 name: Docker Image
 
 # push 到 main 后自动构建镜像并推送到 GHCR（GitHub Container Registry）
-# 远程部署一行命令：curl -fsSL https://raw.githubusercontent.com/aeuicey/delta-force/main/Docker/deploy.sh | bash
+# 远程部署一行命令：curl -fsSL https://raw.githubusercontent.com/aeuicey/DeltaForce-TacticalPanel/main/Docker/deploy.sh | bash
 on:
   push:
     branches: [main]
@@ -47,6 +47,6 @@ jobs:
       - name: Cleanup old image versions
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PACKAGE: delta-force
+          PACKAGE: deltaforce-tacticalpanel
           KEEP_TAGS: latest,0.0.2-indoor,sha-${{ github.sha }}
         run: node scripts/cleanup-ghcr.cjs

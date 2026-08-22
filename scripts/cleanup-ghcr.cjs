@@ -1,7 +1,7 @@
 // GHCR 镜像版本清理（GitHub Actions 专用）：只保留当次推送的标签版本，其余全部删除。
 // 保留规则：含 latest / 当前版本号 / 当前 sha 标签的版本。
 //
-// 环境变量：GITHUB_TOKEN、PACKAGE（容器包名，如 delta-force）、KEEP_TAGS（逗号分隔）
+// 环境变量：GITHUB_TOKEN、PACKAGE（容器包名，如 deltaforce-tacticalpanel）、KEEP_TAGS（逗号分隔）
 
 const token = process.env.GITHUB_TOKEN
 const pkg = process.env.PACKAGE
