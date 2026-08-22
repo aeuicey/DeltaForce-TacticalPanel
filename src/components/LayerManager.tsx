@@ -3931,8 +3931,24 @@ export default function LayerManager({
   closeSelPanelRef.current = closeSelPanel
 
   const setKeyLocked = useCallback((key: string, locked: boolean) => {
-    const targets = targetLayersOf(key)
+    let targets = targetLayersOf(key)
     if (targets.length === 0) return
+    // 群组锁定扩展：目标属于锁定群组时，操作作用于整个群组（点选组内单图形等同选中群组）
+    const lockGroups = new Set<string>()
+    for (const t of targets) {
+      const lg = ((t.feature?.properties ?? {}) as Record<string, unknown>).lockGroup
+      if (typeof lg === 'string' && lg) lockGroups.add(lg)
+    }
+    if (lockGroups.size > 0) {
+      const expanded: typeof targets = []
+      fgRef.current?.eachLayer((l) => {
+        const fl = l as AnyWithFeature
+        if (!fl.feature) return
+        const lg = ((fl.feature.properties ?? {}) as Record<string, unknown>).lockGroup
+        if (typeof lg === 'string' && lockGroups.has(lg)) expanded.push(fl)
+      })
+      targets = expanded
+    }
     const current = targets.some((target) => {
       const p = (target.feature?.properties ?? {}) as Record<string, unknown>
       return isFeatureLocked(p)
@@ -3964,6 +3980,8 @@ export default function LayerManager({
     const single = keys.length === 1
     const first = layers[0]
     const lockedSel = single && layers.some((layer) => isFeatureLocked((layer.feature?.properties ?? {}) as Record<string, unknown>))
+    // 群组锁定选中（含多选扩展后的整组）：隐藏全部编辑手柄与样式/删除按钮，只留「解除群组锁定」
+    const groupLockedSel = layers.some((layer) => Boolean(((layer.feature?.properties ?? {}) as Record<string, unknown>).lockGroup))
     const props = (first.feature?.properties ?? {}) as Record<string, unknown>
     const isCircle = props.type === 'circle'
     const isText = props.type === 'text'
@@ -4132,12 +4150,14 @@ export default function LayerManager({
         L.DomEvent.on(lockButtonElement, 'pointerdown', (event: Event) => { if (platform.kind === 'android') L.DomEvent.stop(event) })
       }
     }
-    if (lockedSel) {
+    if (lockedSel || groupLockedSel) {
       const eastCenter = L.latLng(bounds.getCenter().lat, bounds.getEast())
       const mobileActions = platform.kind === 'android'
       const unlockPos = map.containerPointToLatLng(map.latLngToContainerPoint(eastCenter).add([mobileActions ? 42 : 34, 0]))
+      const unlockTitle = groupLockedSel ? '解除群组锁定' : '解锁图形'
+      const unlockIcon = groupLockedSel ? `${lockIcon(true)}${GROUP_BADGE_SVG}` : lockIcon(true)
       const unlockButton = L.marker(unlockPos, {
-        icon: L.divIcon({ className: 'edit-lock-trigger-wrap', html: `<button type="button" class="edit-unlock-trigger" title="解锁图形" aria-label="解锁图形">${lockIcon(true)}</button>`, iconSize: mobileActions ? [44, 44] : [30, 26], iconAnchor: mobileActions ? [22, 22] : [15, 13] }),
+        icon: L.divIcon({ className: 'edit-lock-trigger-wrap', html: `<button type="button" class="edit-unlock-trigger${groupLockedSel ? ' edit-grouplock-trigger' : ''}" title="${unlockTitle}" aria-label="${unlockTitle}">${unlockIcon}</button>`, iconSize: mobileActions ? [44, 44] : [30, 26], iconAnchor: mobileActions ? [22, 22] : [15, 13] }),
         pane: gizmoPane, interactive: true, keyboard: false, zIndexOffset: 1100,
       })
       unlockButton.on('mousedown', (e: L.LeafletMouseEvent) => { L.DomEvent.stop(e.originalEvent as MouseEvent); L.DomEvent.stopPropagation(e) })
