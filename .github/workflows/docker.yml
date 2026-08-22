@@ -40,6 +40,9 @@ jobs:
           context: .
           file: Docker/Dockerfile
           push: true
+          # 关闭 provenance/SBOM 证明：其 OCI index 结构会让老版本 Docker 报 manifest unknown
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:0.0.2-indoor
