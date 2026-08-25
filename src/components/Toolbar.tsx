@@ -303,9 +303,6 @@ export default function Toolbar({
           <span className="tactical-label-long">导出</span>
           <span className="tactical-label-short" aria-hidden="true">导</span>
         </button>
-        <button className="toolbar-collapse-btn" type="button" onClick={() => { setOpenMenu(null); setCollapsed(true) }} title="收起顶部栏" aria-label="收起顶部栏">
-          <i className="fa-solid fa-chevron-up" aria-hidden="true" />
-        </button>
         {/* 网页端分享（Web 独占；中继不可用时置灰） */}
         {platform.kind === 'web' && onOpenShare ? (
           <button
@@ -403,6 +400,10 @@ export default function Toolbar({
             ) : null}
           </div>
         ) : null}
+        {/* 收起顶部栏（固定最右端） */}
+        <button className="toolbar-collapse-btn" type="button" onClick={() => { setOpenMenu(null); setCollapsed(true) }} title="收起顶部栏" aria-label="收起顶部栏">
+          <i className="fa-solid fa-chevron-up" aria-hidden="true" />
+        </button>
       </div>
     </header>
   )
