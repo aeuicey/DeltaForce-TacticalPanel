@@ -78,6 +78,7 @@ interface ToolbarProps {
   /** 演示模式访客只读：禁用绘制/编辑按钮（仅保留查看） */
   readOnly?: boolean
   cinematicModeSwitch?: boolean
+  cinematicInitiallyCollapsed?: boolean
 }
 
 /** 左上角图标（来自 enn.com.cn，三角洲行动标题标识） */
@@ -129,11 +130,12 @@ export default function Toolbar({
   onResetSplashVideo,
   readOnly = false,
   cinematicModeSwitch = false,
+  cinematicInitiallyCollapsed = false,
 }: ToolbarProps) {
   const [openMenu, setOpenMenu] = useState<ToolbarMenu | null>(null)
   // 「开屏视频」三级子菜单展开态（hover 展开、点击切换，兼容触摸）
   const [splashSubOpen, setSplashSubOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(cinematicInitiallyCollapsed)
   const currentMap = MAPS.find((m) => m.id === mapId) ?? MAPS[0]
   const attackDefenseMode = gameModeOptions.find((mode) => mode.id === 'attack-defense')
   const selectableModeOptions = [

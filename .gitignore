@@ -11,6 +11,7 @@
 /release/
 /release-optimized/
 /release-v010-*/
+/release-staging*/
 /out/
 *.exe
 *.msi
@@ -29,6 +30,7 @@
 
 # Local map source assets
 /map_source/
+/source/
 
 # Logs and runtime files
 /logs/
