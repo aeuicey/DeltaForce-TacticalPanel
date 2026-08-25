@@ -506,6 +506,8 @@ export default function App() {
     syncedAt: number | null
   } | null>(null)
   const [shareExpired, setShareExpired] = useState(false)
+  // 分享失效倒计时（秒后自动重定向首页）
+  const [shareExpiredCountdown, setShareExpiredCountdown] = useState(5)
   const [shareNicknameAsk, setShareNicknameAsk] = useState(false)
   const [shareBusy, setShareBusy] = useState(false)
   const [shareError, setShareError] = useState('')
@@ -1997,7 +1999,7 @@ export default function App() {
       applyingRemoteRef.current = false
       return
     }
-    const snapshot = { version: 16 as const, lastMapId: mapId, lastView: view, maps, progress, plans, ui }
+    const snapshot = { version: APP_STORAGE_VERSION, lastMapId: mapId, lastView: view, maps, progress, plans, ui }
     lanLastJsonRef.current = JSON.stringify(snapshot)
     void pushLanState(lanLastJsonRef.current)
   }, [lanSession, maps, mapId, view, progress, plans, ui])
@@ -2146,7 +2148,7 @@ export default function App() {
       applyingRemoteRef.current = false
       return
     }
-    const snapshot = { version: 16 as const, lastMapId: mapId, lastView: view, maps, progress, plans, ui }
+    const snapshot = { version: APP_STORAGE_VERSION, lastMapId: mapId, lastView: view, maps, progress, plans, ui }
     const json = JSON.stringify(snapshot)
     // 与应用远端快照后的回环 POST 去重（内容未变不上报）
     if (json === lanLastJsonRef.current) return
@@ -2250,10 +2252,26 @@ export default function App() {
     return () => events.close()
   }, [shareGuestSuffix, shareGuestNickname, shareExpired, applyRemoteState])
 
+  // 分享失效：5 秒倒计时后自动重定向到首页（去除 ?share= 后缀）
+  useEffect(() => {
+    if (!shareExpired) return
+    setShareExpiredCountdown(5)
+    const timer = window.setInterval(() => {
+      setShareExpiredCountdown((n) => (n > 0 ? n - 1 : 0))
+    }, 1000)
+    const redirect = window.setTimeout(() => {
+      window.location.replace(window.location.origin + window.location.pathname)
+    }, 5000)
+    return () => {
+      window.clearInterval(timer)
+      window.clearTimeout(redirect)
+    }
+  }, [shareExpired])
+
   // 主机：快照变化 500ms 防抖推送整份状态（modifiedAt = 推送时刻）
   useEffect(() => {
     if (!shareHost) return
-    const snapshot = { version: 16 as const, lastMapId: mapId, lastView: view, maps, progress, plans, ui }
+    const snapshot = { version: APP_STORAGE_VERSION, lastMapId: mapId, lastView: view, maps, progress, plans, ui }
     const json = JSON.stringify(snapshot)
     const timer = window.setTimeout(() => {
       void pushShareState(shareHost.suffix, json, Date.now())
@@ -5111,6 +5129,26 @@ export default function App() {
           onStop={handleShareStop}
           onNicknameChange={handleShareNicknameChange}
         />
+      ) : null}
+
+      {/* 分享失效：全屏显眼提示 + 倒计时自动重定向首页 */}
+      {shareExpired ? (
+        <div className="share-expired-overlay" role="alertdialog" aria-label="分享已失效">
+          <div className="share-expired-card">
+            <i className="fa-solid fa-link-slash share-expired-icon" aria-hidden="true" />
+            <div className="share-expired-title">分享已失效</div>
+            <div className="share-expired-desc">
+              主机已停止分享或链接已过期，{shareExpiredCountdown} 秒后自动返回首页…
+            </div>
+            <button
+              type="button"
+              className="tb-primary"
+              onClick={() => window.location.replace(window.location.origin + window.location.pathname)}
+            >
+              立即返回首页
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {/* 分享访客首访昵称弹窗（必填，确认后加入） */}

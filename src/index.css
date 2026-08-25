@@ -9958,3 +9958,44 @@ body {
   0%, 100% { box-shadow: 0 0 2px rgba(255, 213, 74, 0.15); }
   50% { box-shadow: 0 0 12px rgba(255, 213, 74, 0.85), 0 0 4px rgba(255, 213, 74, 0.6); }
 }
+
+/* 分享失效全屏提示（显眼居中，倒计时自动重定向首页） */
+.share-expired-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 11, 16, 0.92);
+}
+
+.share-expired-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 36px;
+  max-width: 340px;
+  text-align: center;
+  background: var(--bg-1);
+  border: 1px solid var(--danger, #e0453a);
+  border-radius: 8px;
+  box-shadow: 0 0 24px rgba(224, 69, 58, 0.35);
+}
+
+.share-expired-icon {
+  font-size: 36px;
+  color: var(--danger, #e0453a);
+}
+
+.share-expired-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--tx-0);
+}
+
+.share-expired-desc {
+  font-size: 13px;
+  color: var(--tx-3);
+}
