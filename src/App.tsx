@@ -78,7 +78,7 @@ import {
   openShareEvents,
   probeShareServer,
   pushShareState,
-  shareBeat,
+  startShareHeartbeat,
 } from './platform/shareClient'
 import SplashVideoOverlay from './components/SplashVideoOverlay'
 import { useDeviceType } from './hooks/useDeviceType'
@@ -2279,10 +2279,10 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [shareHost, maps, mapId, view, progress, plans, ui])
 
-  // 主机：5s 心跳保活 + 2s 轮询访客列表 + pagehide sendBeacon 关闭房间
+  // 主机：Worker 保活心跳（防后台节流）+ 2s 轮询访客列表 + pagehide sendBeacon 关闭房间
   useEffect(() => {
     if (!shareHost) return
-    const beatTimer = window.setInterval(() => void shareBeat(shareHost.suffix), 5000)
+    const stopHeartbeat = startShareHeartbeat(shareHost.suffix)
     const pollTimer = window.setInterval(() => {
       void getShareInfo(shareHost.suffix).then((info) => {
         if (info === 'expired') {
@@ -2296,7 +2296,7 @@ export default function App() {
     const onPageHide = () => closeShareBeacon(shareHost.suffix)
     window.addEventListener('pagehide', onPageHide)
     return () => {
-      window.clearInterval(beatTimer)
+      stopHeartbeat()
       window.clearInterval(pollTimer)
       window.removeEventListener('pagehide', onPageHide)
     }

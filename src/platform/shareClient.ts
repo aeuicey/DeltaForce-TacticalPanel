@@ -98,6 +98,37 @@ export async function shareBeat(suffix: string): Promise<void> {
   }
 }
 
+/**
+ * 主机保活心跳（解决标签页后台被浏览器节流导致中继 15s 无心跳判过期）：
+ * - 优先用 Web Worker 定时器（不受后台标签页 intensive throttling 影响）
+ * - Worker 不可用时回退 setInterval
+ * - 切回前台立即补跳一次；返回停止函数
+ */
+export function startShareHeartbeat(suffix: string, intervalMs = 5000): () => void {
+  const beat = () => void shareBeat(suffix)
+  beat()
+  let timer: number | null = null
+  let worker: Worker | null = null
+  let workerUrl = ''
+  try {
+    workerUrl = URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${intervalMs})`], { type: 'application/javascript' }))
+    worker = new Worker(workerUrl)
+    worker.onmessage = beat
+  } catch {
+    timer = window.setInterval(beat, intervalMs)
+  }
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') beat()
+  }
+  document.addEventListener('visibilitychange', onVisible)
+  return () => {
+    worker?.terminate()
+    if (workerUrl) URL.revokeObjectURL(workerUrl)
+    if (timer !== null) window.clearInterval(timer)
+    document.removeEventListener('visibilitychange', onVisible)
+  }
+}
+
 /** 主机主动关闭房间：POST /api/share/:suffix/close（失败静默） */
 export async function closeShare(suffix: string): Promise<void> {
   try {
