@@ -58,6 +58,10 @@ interface ToolbarProps {
   onClearAll: () => void
   /** 打开战术板弹窗（导出 HTML / 方案管理） */
   onOpenTactical: () => void
+  /** 打开安卓手势说明（高阶菜单「快捷键说明」） */
+  onOpenGestureHelp?: () => void
+  /** 分享会话角色（主机绿光 / 访客黄光，分享按钮外围慢闪提示） */
+  shareState?: 'host' | 'guest' | null
   /** 打开网页端分享弹窗（仅 Web 且非局域网访客时渲染按钮） */
   onOpenShare?: () => void
   /** 分享主机运行中（按钮高亮态） */
@@ -120,8 +124,10 @@ export default function Toolbar({
   onClearAll,
   onOpenTactical,
   onOpenShare,
+  onOpenGestureHelp,
   shareRunning = false,
   shareAvailable = true,
+  shareState = null,
   onOpenLanCollab,
   lanCollabRunning = false,
   splashSkippable = true,
@@ -306,7 +312,7 @@ export default function Toolbar({
         {/* 网页端分享（Web 独占；中继不可用时置灰） */}
         {platform.kind === 'web' && onOpenShare ? (
           <button
-            className={`tactical-btn share-btn ${shareRunning ? 'running' : ''}`}
+            className={`tactical-btn share-btn ${shareRunning ? 'running' : ''} ${shareState === 'host' ? 'glow-host' : shareState === 'guest' ? 'glow-guest' : ''}`}
             onClick={onOpenShare}
             disabled={!shareAvailable}
             title={shareAvailable ? '分享：生成链接，访客实时观看（只读）' : '需部署分享中继服务器（见 Docker 部署）'}
@@ -316,8 +322,8 @@ export default function Toolbar({
             <span className="tactical-label-short" aria-hidden="true">享</span>
           </button>
         ) : null}
-        {/* 高阶菜单（二级目录：地图协作 / 开屏视频，Android 主机端独占） */}
-        {platform.kind === 'android' && (onOpenLanCollab || onPickSplashVideo) ? (
+        {/* 高阶菜单（二级目录：地图协作 / 开屏视频 / 快捷键说明，Android 主机端独占） */}
+        {platform.kind === 'android' && (onOpenLanCollab || onPickSplashVideo || onOpenGestureHelp) ? (
           <div className={`advanced-menu-wrap ${openMenu === 'advanced' ? 'open' : ''}`}>
             <button
               className={`tactical-btn advanced-btn ${lanCollabRunning ? 'running' : ''}`}
@@ -395,6 +401,19 @@ export default function Toolbar({
                       </div>
                     ) : null}
                   </div>
+                ) : null}
+                {onOpenGestureHelp ? (
+                  <button
+                    role="menuitem"
+                    className="map-select-item"
+                    onClick={() => {
+                      onOpenGestureHelp()
+                      setOpenMenu(null)
+                    }}
+                  >
+                    <i className="fa-solid fa-keyboard" aria-hidden="true" />
+                    <span>快捷键说明</span>
+                  </button>
                 ) : null}
               </div>
             ) : null}

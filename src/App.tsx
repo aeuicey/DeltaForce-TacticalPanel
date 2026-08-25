@@ -66,6 +66,7 @@ import {
 } from './platform/lanServer'
 import type { PluginListenerHandle } from '@capacitor/core'
 import LanCollabModal from './components/LanCollabModal'
+import AndroidGestureHelp from './components/AndroidGestureHelp'
 import ShareModal, { ShareNicknameModal } from './components/ShareModal'
 import {
   SHARE_NICKNAME_KEY,
@@ -460,6 +461,8 @@ export default function App() {
   // ---- 局域网协作模式 ----
   // 主机端（Android）：协作弹窗开关 + 服务器运行信息
   const [lanCollabOpen, setLanCollabOpen] = useState(false)
+  // 安卓手势说明弹窗（高阶菜单「快捷键说明」入口）
+  const [gestureHelpOpen, setGestureHelpOpen] = useState(false)
   const [lanSession, setLanSession] = useState<LanServerInfo | null>(null)
   // 访客端（web 浏览器访问主机地址）：探测命中后进入访客模式
   const [lanVisitor, setLanVisitor] = useState<{ mode: LanSessionMode } | null>(null)
@@ -4693,8 +4696,10 @@ export default function App() {
         onOpenTactical={() => setTacticalOpen(true)}
         onOpenShare={platform.kind === 'web' && !lanVisitor ? () => setShareOpen(true) : undefined}
         shareRunning={Boolean(shareHost)}
+        shareState={shareHost ? 'host' : shareGuest ? 'guest' : null}
         shareAvailable={shareAvailable}
         onOpenLanCollab={() => setLanCollabOpen(true)}
+        onOpenGestureHelp={() => setGestureHelpOpen(true)}
         lanCollabRunning={Boolean(lanSession?.running)}
         splashSkippable={splashConfig.skippable}
         onSplashSkippableChange={(v) => updateSplashConfig({ skippable: v })}
@@ -4762,7 +4767,7 @@ export default function App() {
           onCustomOwnChange={setCustomOwn}
           onAddCustom={handleAddCustomVehicle}
           // 演示模式访客只读：隐藏「兵棋推演」部署分组
-          hideWargame={demoReadOnly}
+          hideWargame={lanVisitor?.mode === 'demo'}
           // 兵棋推演
           view={view}
           operators={operators}
@@ -5084,6 +5089,11 @@ export default function App() {
           onClose={() => setLanCollabOpen(false)}
           onSessionChange={setLanSession}
         />
+      ) : null}
+
+      {/* 安卓手势说明弹窗（高阶菜单「快捷键说明」入口） */}
+      {platform.kind === 'android' ? (
+        <AndroidGestureHelp open={gestureHelpOpen} onClose={() => setGestureHelpOpen(false)} />
       ) : null}
 
       {/* 网页端分享弹窗（Web 独占：未分享 / 主机态 / 访客态 / 过期态） */}
