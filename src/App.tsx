@@ -179,11 +179,26 @@ function resolveStageTargetBucket(
   const emptyTarget = createEmptyMapState()
   emptyTarget.operators = fallbackRoster
   const targetBase = existingTarget ?? snapshotTacticalBucket(emptyTarget, stageId, round)
+  // 加载时按 uid 用当前最新名单调和（攻/守双侧）：任何传播链遗漏都会在切阶段时收敛，
+  // 确保"防守能跟随、进攻也能跟随"。部署字段（lat/lng/status）保持桶内状态不动。
+  const liveByUid = new Map<string, { name: string; operatorId: string; cls: OperatorUnit['cls'] }>()
+  for (const side of ['attack', 'defense'] as const) {
+    for (const operator of operatorsBucketOf(state)[side] ?? []) {
+      liveByUid.set(operator.uid, { name: operator.name, operatorId: operator.operatorId, cls: operator.cls })
+    }
+  }
+  const reconcile = (operators: OperatorUnit[]): OperatorUnit[] =>
+    operators.map((operator) => {
+      const live = liveByUid.get(operator.uid)
+      return live && (live.name !== operator.name || live.operatorId !== operator.operatorId || live.cls !== operator.cls)
+        ? { ...operator, name: live.name, operatorId: live.operatorId, cls: live.cls }
+        : operator
+    })
   return {
     ...targetBase,
     operators: {
-      attack: targetBase.operators.attack.length ? targetBase.operators.attack : fallbackRoster.attack,
-      defense: targetBase.operators.defense.length ? targetBase.operators.defense : fallbackRoster.defense,
+      attack: reconcile(targetBase.operators.attack.length ? targetBase.operators.attack : fallbackRoster.attack),
+      defense: reconcile(targetBase.operators.defense.length ? targetBase.operators.defense : fallbackRoster.defense),
     },
   }
 }
