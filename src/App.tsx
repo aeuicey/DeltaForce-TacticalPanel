@@ -24,7 +24,7 @@ import type {
   VehicleItem,
   WargameState,
 } from './types'
-import { MAP_BY_ID } from './config/maps'
+import { MAPS, MAP_BY_ID } from './config/maps'
 import { APP_STORAGE_VERSION, applyTacticalBucket, buildingsBucketOf, createEmptyMapState, createTacticalRound, fieldSupportsBucketOf, loadState, normalizeDrawingGeoJson, normalizePersistedState, normalizeTacticalBucket, saveState, snapshotTacticalBucket, syncActiveTacticalBucket, tacticalBucketKey, tacticalContextKey, vehiclesBucketOf, operatorsBucketOf, connectionsBucketOf, teamsBucketOf, routesBucketOf, wargameOf } from './utils/storage'
 import { emptyGeoJson, genUid } from './utils/geo'
 import { buildTacticalHtml, downloadText } from './utils/exportTactical'
@@ -43,13 +43,15 @@ import DeployBar from './components/DeployBar'
 import Toolbar from './components/Toolbar'
 import LeftPanel from './components/LeftPanel'
 import MapView from './components/MapView'
+import MapRegionErrorBoundary from './components/MapRegionErrorBoundary'
+import RuntimeDataNotice from './components/RuntimeDataNotice'
 import PointPanel from './components/PointPanel'
 import TacticalBoardModal from './components/TacticalBoardModal'
 import {
   MODE_CONFIG_STORAGE_KEY,
   MODE_CONFIG_SYNC_CHANNEL,
   MODE_CONFIG_SYNC_MESSAGE,
-  buildOfficialModeData,
+  buildRuntimeModeData,
   emptyModeMapOverride,
   loadModeConfigStore,
   modeMapsForPlatform,
@@ -85,8 +87,9 @@ import SplashVideoOverlay from './components/SplashVideoOverlay'
 import { useDeviceType } from './hooks/useDeviceType'
 import { propsForPlatform, stagesForPlatform, type GameDataPlatform } from './config/gameDataPlatform'
 import { evaluateVehicleRefreshRule } from './utils/vehicleRefreshRuntime'
+import { useBeginnerDemoBridge } from './demo/useBeginnerDemoBridge'
 
-const DEFAULT_MAP_IDS = ['ascent', 'flashpoint', 'fault', 'brokentrack', 'colosseum', 'stormeye', 'ember', 'pyramid', 'trench', 'umuscanal', 'aftershock']
+const DEFAULT_MAP_IDS = MAPS.map((map) => map.id)
 const DEFAULT_PROP_VIS: PropVisibility = {
   载具补给站: true,
   固定防空炮: true,
@@ -311,6 +314,10 @@ export default function App() {
   const device = useDeviceType()
   const cinematicDemoParams = useMemo(() => new URLSearchParams(window.location.search), [])
   const isCinematicDemoFrame = cinematicDemoParams.get('cinematicDemoFrame') === '1'
+  const isBeginnerDemo = cinematicDemoParams.get('beginnerDemo') === '1'
+  const beginnerDemoFrame = (cinematicDemoParams.get('demoRole') === 'teaser' || cinematicDemoParams.get('demoRole') === 'deployment' || cinematicDemoParams.get('demoRole') === 'receiver')
+    ? cinematicDemoParams.get('demoRole')
+    : 'tutorial'
   const isCinematicMobileFrame = isCinematicDemoFrame && cinematicDemoParams.get('platformDemo') === 'android'
   const isCinematicMapOnly = isCinematicDemoFrame && cinematicDemoParams.get('mapOnly') === '1'
   const isCinematicLayerTour = isCinematicDemoFrame && cinematicDemoParams.get('layerTour') === '1'
@@ -342,23 +349,26 @@ export default function App() {
   const cinematicFocusLat = Number(cinematicDemoParams.get('focusLat'))
   const cinematicFocusLng = Number(cinematicDemoParams.get('focusLng'))
   const cinematicFocusZoom = Number(cinematicDemoParams.get('focusZoom'))
-  const persisted = useMemo(loadState, [])
+  const persisted = useMemo(() => isBeginnerDemo ? null : loadState(), [isBeginnerDemo])
   const initialModeStore = useMemo(() => {
     const store = loadModeConfigStore()
     if (!isCinematicDemoFrame) return store
+    const requestedMode = cinematicDemoParams.get('mode')
     return {
       ...store,
-      activeModeId: cinematicDemoParams.get('mode') === 'winner' ? 'winner-takes-all' : 'attack-defense',
+      activeModeId: requestedMode === 'winner' ? 'winner-takes-all' : requestedMode === 'attack-defense' || isBeginnerDemo ? 'attack-defense' : store.activeModeId,
     }
-  }, [cinematicDemoParams, isCinematicDemoFrame])
+  }, [cinematicDemoParams, isBeginnerDemo, isCinematicDemoFrame])
   const [modeStore, setModeStore] = useState<ModeConfigStore>(initialModeStore)
   const [modeStageSelection, setModeStageSelection] = useState<Record<string, string>>(() => (
     isCinematicDemoFrame && cinematicDemoMap && cinematicDemoStage
-      ? { [tacticalContextKey('pc', 'winner-takes-all', cinematicDemoMap)]: cinematicDemoStage }
+      ? { [tacticalContextKey(cinematicDemoParams.get('platform') === 'mobile' ? 'mobile' : 'pc', initialModeStore.activeModeId, cinematicDemoMap)]: cinematicDemoStage }
       : {}
   ))
   const [gameDataPlatform, setGameDataPlatform] = useState<GameDataPlatform>(() =>
-    isCinematicModeSwitch ? 'pc' : localStorage.getItem('deltaforce-game-data-platform') === 'mobile' ? 'mobile' : 'pc',
+    isBeginnerDemo && cinematicDemoParams.get('platform') === 'mobile'
+      ? 'mobile'
+      : isCinematicModeSwitch ? 'pc' : localStorage.getItem('deltaforce-game-data-platform') === 'mobile' ? 'mobile' : 'pc',
   )
 
   const [mapId, setMapId] = useState<string>(
@@ -485,6 +495,7 @@ export default function App() {
     onConfirm: () => void
   } | null>(null)
   const [refreshVehicleDelete, setRefreshVehicleDelete] = useState<{ vehicles: VehicleItem[]; uids: string[] } | null>(null)
+  const [mapRegionRetryKey, setMapRegionRetryKey] = useState(0)
 
   useEffect(() => {
     if (isCinematicDemoFrame) return
@@ -737,6 +748,7 @@ export default function App() {
     setProgress(normalized.progress)
   }, [])
 
+  const [beginnerMapReady, setBeginnerMapReady] = useState(false)
   const [cinematicTouchMap, setCinematicTouchMap] = useState<L.Map | null>(null)
   const touchDemoStartedRef = useRef(false)
   const pawnMotionStartedRef = useRef(false)
@@ -759,6 +771,12 @@ export default function App() {
   const activeTacticalContextKey = tacticalContextKey(gameDataPlatform, activeModeId, mapId)
   const activeTacticalContextKeyRef = useRef(activeTacticalContextKey)
   activeTacticalContextKeyRef.current = activeTacticalContextKey
+  const beginnerContextRef = useRef(activeTacticalContextKey)
+  useEffect(() => {
+    if (!isBeginnerDemo || beginnerContextRef.current === activeTacticalContextKey) return
+    beginnerContextRef.current = activeTacticalContextKey
+    setBeginnerMapReady(false)
+  }, [activeTacticalContextKey, isBeginnerDemo])
   const capturedStageIndex = Math.min(progress[activeTacticalContextKey] ?? 0, Math.max(0, stages.length - 1))
   const activeModeMap = useMemo(
     () => activeModeProfile
@@ -774,11 +792,13 @@ export default function App() {
       ? modeStageSelection[modeStageKey]
       : activeModeMap.stages[0]?.id ?? 'S1'
     : null
-  const activeOfficialMode = useMemo(
-    () => activeModeProfile ? buildOfficialModeData(activeModeProfile, gameDataPlatform) : null,
-    [activeModeProfile, gameDataPlatform],
+  // 运行时只转换当前地图；完整地图集合仍由正式导出按显式范围转换。
+  const activeRuntimeMode = useMemo(
+    () => activeModeProfile ? buildRuntimeModeData(activeModeProfile, gameDataPlatform, mapId) : null,
+    [activeModeProfile, gameDataPlatform, mapId],
   )
-  const activeOfficialModeMap = activeOfficialMode?.maps[mapId] ?? null
+  const activeOfficialModeMap = activeRuntimeMode?.map ?? null
+  const activeModeIssues = activeRuntimeMode?.issues ?? []
   const pointPanelStages = activeOfficialModeMap?.stages.length ? activeOfficialModeMap.stages : stages
   const pointPanelStageIndex = activeOfficialModeMap?.stages.length
     ? Math.max(0, activeOfficialModeMap.stages.findIndex((stage) => stage.id === activeModeStageId))
@@ -2408,6 +2428,8 @@ export default function App() {
   }, [isCinematicDemoFrame, modeStore])
 
   useEffect(() => {
+    // Demo owns its mode selection; external configuration must not replace it.
+    if (isCinematicDemoFrame) return
     const onStorage = (event: StorageEvent) => {
       if (event.key !== MODE_CONFIG_STORAGE_KEY || !event.newValue) return
       try {
@@ -2419,9 +2441,10 @@ export default function App() {
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
-  }, [])
+  }, [isCinematicDemoFrame])
 
   useEffect(() => {
+    if (isCinematicDemoFrame) return
     if (typeof BroadcastChannel === 'undefined') return
     const channel = new BroadcastChannel(MODE_CONFIG_SYNC_CHANNEL)
     channel.addEventListener('message', (event: MessageEvent<unknown>) => {
@@ -2429,9 +2452,10 @@ export default function App() {
       if (normalized) setModeStore(normalized)
     })
     return () => channel.close()
-  }, [])
+  }, [isCinematicDemoFrame])
 
   useEffect(() => {
+    if (isCinematicDemoFrame) return
     const onMessage = (event: MessageEvent<unknown>) => {
       const payload = event.data as { type?: unknown; store?: unknown } | null
       if (!payload || payload.type !== MODE_CONFIG_SYNC_MESSAGE) return
@@ -2448,24 +2472,28 @@ export default function App() {
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [])
+  }, [isCinematicDemoFrame])
 
   useEffect(() => {
+    // Leaflet focuses the iframe on map press. Reloading the published active
+    // mode here used to remount the Demo map before mouseup (attack -> winner).
+    if (isCinematicDemoFrame) return
     const refreshPublishedMode = () => setModeStore(loadModeConfigStore())
     window.addEventListener('focus', refreshPublishedMode)
     return () => window.removeEventListener('focus', refreshPublishedMode)
-  }, [])
+  }, [isCinematicDemoFrame])
 
   // 切换地图/视角时清空选中态
   useEffect(() => {
     setSelectedPoint(null)
     setDeployTarget(null)
-  }, [mapId, view])
+  }, [isBeginnerDemo, mapId, view])
 
   const handleMapReady = useCallback((m: L.Map) => {
     mapRef.current = m
+    if (isBeginnerDemo) setBeginnerMapReady(true)
     if (isCinematicTouchPrinciples || isCinematicPawnMotion || isCinematicUnitCards || isCinematicRouteGrow || cinematicDefenseDemo || isCinematicStylePanelDemo || isCinematicRefreshSidebar || isCinematicCompassDemo) setCinematicTouchMap(m)
-  }, [cinematicDefenseDemo, isCinematicCompassDemo, isCinematicPawnMotion, isCinematicRefreshSidebar, isCinematicRouteGrow, isCinematicStylePanelDemo, isCinematicTouchPrinciples, isCinematicUnitCards])
+  }, [cinematicDefenseDemo, isBeginnerDemo, isCinematicCompassDemo, isCinematicPawnMotion, isCinematicRefreshSidebar, isCinematicRouteGrow, isCinematicStylePanelDemo, isCinematicTouchPrinciples, isCinematicUnitCards])
 
   // 「同步视角」按钮：点击切换开/关；长按约 500ms 弹出使用说明（长按后不触发点击切换）
   const syncBtnPressRef = useRef<{ timer: number; longFired: boolean }>({ timer: 0, longFired: false })
@@ -2635,7 +2663,7 @@ export default function App() {
     const building: BuildingUnit = {
       uid: genUid('building'),
       kind,
-      name: `${buildingConfig.name}碉堡`,
+      name: kind === 'phalanx' ? buildingConfig.name : `${buildingConfig.name}碉堡`,
       side: own ? view : (view === 'attack' ? 'defense' : 'attack'),
       team,
       lat: center.lat,
@@ -4008,9 +4036,11 @@ export default function App() {
         snapshots,
       })
       const stageTag = stageMode === 'current' ? `${stageId}-R${exportRound}` : stageMode === 'overview' ? 'overview' : 'all'
-      downloadText(`战术板_${config.name}_${view === 'attack' ? '攻方' : '守方'}_${stageTag}.html`, html)
+      const filename = `战术板_${config.name}_${view === 'attack' ? '攻方' : '守方'}_${stageTag}.html`
+      if (!isBeginnerDemo) downloadText(filename, html)
+      return { filename, html }
     },
-    [mapId, config, view, activeModeStageId, capturedStageIndex, stages, platformProps, ui.layers.props, ui.propVis],
+    [isBeginnerDemo, mapId, config, view, activeModeStageId, capturedStageIndex, stages, platformProps, ui.layers.props, ui.propVis],
   )
 
   const handleOperatorSkillUse = useCallback(
@@ -4161,8 +4191,11 @@ export default function App() {
       mapState: { ...createEmptyMapState(), tacticalBuckets: { activeKey: currentBucket?.key ?? '', buckets: selectedBuckets } },
     }
     const suffix = currentBucket ? (scope === 'stage' ? `_${currentBucket.stageId}-all` : scope === 'current' ? `_${currentBucket.stageId}-R${currentBucket.round}` : '_all') : ''
-    downloadText(`原生战术包_${config.name}_${view === 'attack' ? '攻方' : '守方'}${suffix}.dfboard`, JSON.stringify(payload), 'application/json')
-  }, [activeModeId, activeModeStageId, capturedStageIndex, config.name, gameDataPlatform, mapId, stages, view])
+    const filename = `原生战术包_${config.name}_${view === 'attack' ? '攻方' : '守方'}${suffix}.dfboard`
+    const content = JSON.stringify(payload)
+    if (!isBeginnerDemo) downloadText(filename, content, 'application/json')
+    return { filename, content }
+  }, [activeModeId, activeModeStageId, capturedStageIndex, config.name, gameDataPlatform, isBeginnerDemo, mapId, stages, view])
 
   const handleImportNativeTactical = useCallback(async (file: File) => {
     let payload: { format?: unknown; version?: unknown; scope?: unknown; gameDataPlatform?: unknown; modeId?: unknown; mapId?: unknown; view?: unknown; mapState?: unknown }
@@ -4186,7 +4219,7 @@ export default function App() {
     }
     const targetContextKey = tacticalContextKey(targetPlatform, targetModeId, targetMapId)
     const source = payload.mapState as MapState
-    if (!window.confirm(`导入将覆盖“${targetPlatform === 'mobile' ? '移动端' : 'PC端'} · ${targetProfile.name} · ${MAP_BY_ID[targetMapId].name}”对应范围的战术数据，是否继续？`)) return
+    if (!isBeginnerDemo && !window.confirm(`导入将覆盖“${targetPlatform === 'mobile' ? '移动端' : 'PC端'} · ${targetProfile.name} · ${MAP_BY_ID[targetMapId].name}”对应范围的战术数据，是否继续？`)) return
     const imported: MapState = {
       ...createEmptyMapState(),
       ...source,
@@ -4223,7 +4256,7 @@ export default function App() {
       return { ...current, [targetContextKey]: activeBucket ? applyTacticalBucket(merged, activeBucket) : merged }
     })
     setGameDataPlatform(targetPlatform)
-    localStorage.setItem('deltaforce-game-data-platform', targetPlatform)
+    if (!isBeginnerDemo) localStorage.setItem('deltaforce-game-data-platform', targetPlatform)
     setModeStore((current) => ({ ...current, activeModeId: targetModeId }))
     setMapId(targetMapId)
     setView(payload.view === 'defense' ? 'defense' : 'attack')
@@ -4232,8 +4265,8 @@ export default function App() {
       setProgress((current) => ({ ...current, [targetContextKey]: Math.max(0, targetModeMap?.stages.findIndex((stage) => stage.id === activeBucket.stageId) ?? 0) }))
       setModeStageSelection((current) => ({ ...current, [targetContextKey]: activeBucket.stageId }))
     }
-    window.alert(packageScope === 'stage' ? '当前阶段原生包已导入，其他阶段保持不变。' : packageScope === 'current' ? '当前回合原生包已导入，其他阶段回合保持不变。' : '原生战术包已导入。')
-  }, [activeModeId, gameDataPlatform, modeStore.profiles])
+    if (!isBeginnerDemo) window.alert(packageScope === 'stage' ? '当前阶段原生包已导入，其他阶段保持不变。' : packageScope === 'current' ? '当前回合原生包已导入，其他阶段回合保持不变。' : '原生战术包已导入。')
+  }, [activeModeId, gameDataPlatform, isBeginnerDemo, modeStore.profiles])
 
   /** 保存当前战术为方案（自定义名称；记录当前 地图×阶段×视角 的完整部署快照） */
   const handleSavePlan = useCallback(
@@ -4770,8 +4803,36 @@ export default function App() {
     setDeployTarget(null)
   }, [activeModeMap, activeTacticalContextKey, capturedStageIndex, handleSelectModeStage, mapId, stages, updateMap])
 
+  const beginnerDemoBridge = useBeginnerDemoBridge({
+    enabled: isBeginnerDemo && isCinematicDemoFrame,
+    frameId: beginnerDemoFrame as 'teaser' | 'tutorial' | 'deployment' | 'receiver',
+    mapReady: beginnerMapReady,
+    mapId,
+    gameDataPlatform,
+    activeModeId,
+    activeStageId: activeModeStageId,
+    view,
+    state,
+    ui,
+    mapRef,
+    setMapId,
+    setGameDataPlatform,
+    setView,
+    setTool,
+    setUi,
+    onGameMode: handleSelectGameMode,
+    onStage: handleSelectModeStage,
+    onRoundChange: handleRoundChange,
+    onCreateRound: handleCreateRound,
+    onWargameChange: handleWargameChange,
+    updateMap,
+    onExportHtml: handleExportTactical,
+    onExportNative: handleExportNativeTactical,
+    onImportNative: handleImportNativeTactical,
+  })
+
   return (
-    <div className={`app platform-${device.platform} ${device.mobileLayout ? 'mobile-layout' : 'desktop-layout'} ${mobileVisitor ? 'web-mobile' : ''} ${ui.paletteOpen ? 'left-panel-open' : 'left-panel-closed'} ${demoReadOnly ? 'demo-readonly' : ''} ${isCinematicMapOnly ? 'cinematic-map-only' : ''} ${isCinematicCompassDemo ? 'cinematic-compass-demo' : ''} ${isCinematicLayerTour ? 'cinematic-layer-tour' : ''} ${isCinematicObjectiveStates ? 'cinematic-objective-states' : ''} ${isCinematicActionSequence ? `cinematic-action-sequence cinematic-action-${cinematicActionState} cinematic-focus-${cinematicActionFocus}` : ''} ${isCinematicCompletePlan ? `cinematic-complete-plan cinematic-complete-${cinematicCompletePlanFocus}` : ''} ${isCinematicRoundCopy ? `cinematic-round-copy-demo cinematic-round-copy-${cinematicRoundCopyFocus}` : ''} ${isCinematicRefreshSidebar ? `cinematic-refresh-sidebar cinematic-refresh-${cinematicRefreshState}` : ''} ${isCinematicBattleCompare ? `cinematic-battle-${cinematicDemoStage?.toLowerCase()}` : ''} ${isCinematicC1Highlight ? `cinematic-c1-${cinematicDemoStage?.toLowerCase()}` : ''} ${platform.kind === 'android' && splashDone ? 'app-fade-in' : ''}`} style={{
+    <div className={`app platform-${device.platform} ${device.mobileLayout ? 'mobile-layout' : 'desktop-layout'} ${mobileVisitor ? 'web-mobile' : ''} ${isBeginnerDemo ? 'beginner-demo-app' : ''} ${ui.paletteOpen ? 'left-panel-open' : 'left-panel-closed'} ${demoReadOnly ? 'demo-readonly' : ''} ${isCinematicMapOnly ? 'cinematic-map-only' : ''} ${isCinematicCompassDemo ? 'cinematic-compass-demo' : ''} ${isCinematicLayerTour ? 'cinematic-layer-tour' : ''} ${isCinematicObjectiveStates ? 'cinematic-objective-states' : ''} ${isCinematicActionSequence ? `cinematic-action-sequence cinematic-action-${cinematicActionState} cinematic-focus-${cinematicActionFocus}` : ''} ${isCinematicCompletePlan ? `cinematic-complete-plan cinematic-complete-${cinematicCompletePlanFocus}` : ''} ${isCinematicRoundCopy ? `cinematic-round-copy-demo cinematic-round-copy-${cinematicRoundCopyFocus}` : ''} ${isCinematicRefreshSidebar ? `cinematic-refresh-sidebar cinematic-refresh-${cinematicRefreshState}` : ''} ${isCinematicBattleCompare ? `cinematic-battle-${cinematicDemoStage?.toLowerCase()}` : ''} ${isCinematicC1Highlight ? `cinematic-c1-${cinematicDemoStage?.toLowerCase()}` : ''} ${platform.kind === 'android' && splashDone ? 'app-fade-in' : ''}`} style={{
       '--left-panel-width': `${ui.leftPanelWidth}px`,
       '--mobile-map-marker-scale': ui.mapMarkerScale,
       // 载具部署入口沿用 PC 组图的相对几何；44px 透明热区本身不缩放。
@@ -4786,7 +4847,7 @@ export default function App() {
         gameDataPlatform={gameDataPlatform}
         onGameDataPlatform={demoReadOnly ? () => {} : (nextPlatform) => {
           setGameDataPlatform(nextPlatform)
-          localStorage.setItem('deltaforce-game-data-platform', nextPlatform)
+          if (!isBeginnerDemo) localStorage.setItem('deltaforce-game-data-platform', nextPlatform)
           const nextContextKey = tacticalContextKey(nextPlatform, activeModeId, mapId)
           setProgress((current) => ({ ...current, [nextContextKey]: 0 }))
           setSelectedPoint(null)
@@ -4932,8 +4993,19 @@ export default function App() {
           fieldSupports={fieldSupports}
           onAddFieldSupport={handleAddFieldSupport}
         />
-        <MapView
-          key={activeTacticalContextKey}
+        <RuntimeDataNotice
+          mapName={config.name}
+          issues={activeModeIssues}
+          onOpenModeEditor={handleOpenModeEditor}
+        />
+        <MapRegionErrorBoundary
+          key={`${activeTacticalContextKey}-${mapRegionRetryKey}`}
+          mapName={config.name}
+          onRetry={() => setMapRegionRetryKey((value) => value + 1)}
+          onOpenModeEditor={handleOpenModeEditor}
+        >
+          <MapView
+            key={activeTacticalContextKey}
           config={config}
           mobileLayout={device.mobileLayout}
           modeData={activeOfficialModeMap}
@@ -5041,7 +5113,8 @@ export default function App() {
           // 移动端协作访客：启用触控桥接（移动端操作逻辑）
           touchBridge={mobileVisitor}
           cinematicCompassCollapsed={isCinematicObjectiveStates || isCinematicActionSequence}
-        />
+          />
+        </MapRegionErrorBoundary>
         <PointPanel
           stages={pointPanelStages}
           capturedStageIndex={pointPanelStageIndex}
@@ -5105,7 +5178,8 @@ export default function App() {
             <div className="startup-notice-thanks">
               <i className="fa-solid fa-heart" aria-hidden="true" />
               <p>
-                感谢社区贡献者 <a href="https://github.com/aeuicey" target="_blank" rel="noreferrer">@aeuicey</a>，以及所有参与测试、数据整理和意见反馈的玩家。
+                感谢社区贡献者 <a href="https://github.com/aeuicey" target="_blank" rel="noreferrer">aeuicey</a>，
+                感谢 <a href="https://space.bilibili.com/3546918758124069?spm_id_from=333.337.0.0" target="_blank" rel="noreferrer">TJU丶宇生</a> 对地图适配工作的贡献，以及所有参与测试、数据整理和意见反馈的玩家。
               </p>
             </div>
             <button type="button" className="startup-notice-enter" autoFocus onClick={() => setStartupNoticeOpen(false)}>
@@ -5197,9 +5271,9 @@ export default function App() {
           const rounds = Array.from(new Set(Object.values(state.tacticalBuckets?.buckets ?? {}).filter((bucket) => bucket.stageId === stage.id).map((bucket) => bucket.round))).sort((a, b) => a - b)
           return [stage.id, rounds.length ? rounds : [1]]
         }))}
-        onExport={(m, stageId, round) => void handleExportTactical(m, stageId, round)}
-        onExportNative={handleExportNativeTactical}
-        onImportNative={handleImportNativeTactical}
+        onExport={isBeginnerDemo ? beginnerDemoBridge.exportHtml : (m, stageId, round) => void handleExportTactical(m, stageId, round)}
+        onExportNative={isBeginnerDemo ? beginnerDemoBridge.exportNative : handleExportNativeTactical}
+        onImportNative={isBeginnerDemo ? beginnerDemoBridge.importNative : handleImportNativeTactical}
         onSavePlan={handleSavePlan}
         onApplyPlan={handleApplyPlan}
         onDeletePlan={handleDeletePlan}
