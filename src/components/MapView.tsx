@@ -454,7 +454,7 @@ interface MapViewProps {
   cinematicInitialView?: { center: [number, number]; zoom: number } | null
   cinematicBattleCompare?: string | null
   /** 演示模式访客：跟随主机视角（seq 去重，仅新视角触发 setView） */
-  syncView?: { center: [number, number]; zoom: number; seq: number } | null
+  syncView?: { center: [number, number]; zoom: number; seq: number; bearing?: number } | null
   /** 视角跟随生效中：锁定访客的拖动/缩放等视角操作 */
   viewSyncLock?: boolean
   /** 移动端协作访客：启用触控桥接（移动端操作逻辑） */
@@ -506,7 +506,7 @@ function MapSync({
   initialView?: { center: [number, number]; zoom: number } | null
   minZoom: number
   defaultZoom: number
-  syncView?: { center: [number, number]; zoom: number; seq: number } | null
+  syncView?: { center: [number, number]; zoom: number; seq: number; bearing?: number } | null
   /** 视角跟随生效中：锁定访客的拖动/缩放等一切视角操作 */
   viewSyncLock?: boolean
 }) {
@@ -515,9 +515,11 @@ function MapSync({
   const appliedSyncSeqRef = useRef(-1)
   // 演示模式访客：主机推送的视角按 seq 去重后跟随（flyTo 平滑移动/缩放，观看更舒适）。
   // 主机屏幕可能更小（移动端 minZoom 更低），缩放钳位到本机范围，避免出界后反复调整。
+  // bearing（地图旋转角）随视角一并同步，主客视觉一致。
   useEffect(() => {
     if (!syncView || syncView.seq === appliedSyncSeqRef.current) return
     appliedSyncSeqRef.current = syncView.seq
+    if (typeof syncView.bearing === 'number') map.setBearing(syncView.bearing)
     const zoom = Math.min(Math.max(syncView.zoom, map.getMinZoom()), map.getMaxZoom())
     map.flyTo(syncView.center, zoom, { duration: 0.8, easeLinearity: 0.5 })
   }, [map, syncView])
