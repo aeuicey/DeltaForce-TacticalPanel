@@ -1195,8 +1195,9 @@ export default function App() {
   }, [activeModeStageId, isCinematicActionSequence, mapId, updateMap, view])
 
   const handleOpenModeEditor = useCallback(() => {
+    // 用 BASE_URL 拼接，GitHub Pages 子路径部署下绝对路径 /mode-config.html 会 404
     const editor = platform.openPath(
-      '/mode-config.html',
+      `${import.meta.env.BASE_URL}mode-config.html`,
       {
         target: 'deltaforce-mode-config-editor',
         features: 'popup=yes,width=1440,height=900,resizable=yes,scrollbars=no',
