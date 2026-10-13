@@ -246,6 +246,8 @@
 .mobile-layout .route-editor-actions button { padding: 3px 2px; }
 
 .mobile-layout .route-editor-trigger,
+.mobile-layout .route-style-trigger,
+.mobile-layout .route-branch-trigger,
 .mobile-layout .route-delete-trigger {
   position: static;
   width: 36px;
@@ -269,9 +271,14 @@
 }
 
 .mobile-layout .route-selection-hint {
-  max-width: 118px;
+  max-width: 100%;
   font-size: 10px;
   line-height: 15px;
+}
+
+.mobile-layout .route-selection-actions button.active {
+  color: #0e1112;
+  background: var(--gold);
 }
 
 .mobile-layout .left-panel-resizer {
@@ -808,6 +815,18 @@ body:has(.platform-android.mobile-layout) .text-style-panel .tsp-head {
   max-width: min(72vw, 260px);
   max-height: calc(100dvh - var(--toolbar-height) - 16px);
   overflow-y: auto;
+}
+
+/* 普通地图选择列表最多显示约五项，其余在列表内滚动；vh 为旧 WebView 提供回退。 */
+.mobile-layout .toolbar .menu-map .map-select-menu {
+  max-height: 210px;
+  max-height: min(210px, 65vh);
+  max-height: min(210px, 65dvh);
+  overscroll-behavior-y: contain;
+}
+
+.mobile-layout .toolbar .menu-map .map-select-item {
+  flex-shrink: 0;
 }
 
 .mobile-layout .toolbar .map-select-item {
