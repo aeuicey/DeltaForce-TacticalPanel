@@ -36,7 +36,7 @@ export interface LanServerPlugin {
   stop(): Promise<void>
   getInfo(): Promise<LanServerInfo>
   pushState(options: { state: string }): Promise<{ rev: number }>
-  pushView(options: { centerLat: number; centerLng: number; zoom: number; seq: number }): Promise<{ viewRev: number }>
+  pushView(options: { centerLat: number; centerLng: number; zoom: number; seq: number; bearing?: number }): Promise<{ viewRev: number }>
   addListener(
     eventName: 'stateReceived',
     listenerFunc: (event: LanStateReceivedEvent) => void,
@@ -81,10 +81,10 @@ export async function pushLanState(state: string): Promise<number> {
 }
 
 /** 主机推送当前地图视角（演示模式「同步视角」；非 Android no-op 返回 0）。 */
-export async function pushLanView(centerLat: number, centerLng: number, zoom: number, seq: number): Promise<number> {
+export async function pushLanView(centerLat: number, centerLng: number, zoom: number, seq: number, bearing?: number): Promise<number> {
   if (!isAndroid) return 0
   try {
-    const result = await plugin.pushView({ centerLat, centerLng, zoom, seq })
+    const result = await plugin.pushView({ centerLat, centerLng, zoom, seq, bearing })
     return result.viewRev
   } catch {
     return 0

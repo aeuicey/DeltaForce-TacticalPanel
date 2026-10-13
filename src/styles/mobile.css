@@ -157,7 +157,7 @@
 
 .mobile-layout .left-panel {
   /* 面板底色铺到屏幕物理左边；只有内容通过 padding-left 避开挖孔安全区。 */
-  left: 0;
+  left: 2px;
   width: calc(var(--safe-left) + min(58vw, 260px)) !important;
   padding-left: var(--safe-left);
   min-width: 0;
@@ -177,6 +177,10 @@
 
 .mobile-layout .left-panel .panel-body {
   padding-bottom: calc(12px + var(--safe-bottom));
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  /* 触摸滚动配套：overflow-y 由基础规则 .left-panel .panel-body 提供 */
 }
 
 .mobile-layout .point-panel {

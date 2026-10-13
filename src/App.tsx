@@ -578,7 +578,7 @@ export default function App() {
   // 访客端视角同步：最近收到的 viewRev 及其时间戳 / 当前跟随视角 / 状态标显隐
   const lanViewRevRef = useRef(-1)
   const lanViewRevAtRef = useRef(0)
-  const [lanSyncView, setLanSyncView] = useState<{ center: [number, number]; zoom: number; seq: number } | null>(null)
+  const [lanSyncView, setLanSyncView] = useState<{ center: [number, number]; zoom: number; seq: number; bearing?: number } | null>(null)
   const [lanViewSyncActive, setLanViewSyncActive] = useState(false)
 
   // ---- 网页端分享模式（Web 独占，经分享中继服务器 + SSE 房间制同步） ----
@@ -1196,8 +1196,9 @@ export default function App() {
   }, [activeModeStageId, isCinematicActionSequence, mapId, updateMap, view])
 
   const handleOpenModeEditor = useCallback(() => {
+    // 用 BASE_URL 拼接，GitHub Pages 子路径部署下绝对路径 /mode-config.html 会 404
     const editor = platform.openPath(
-      '/mode-config.html',
+      `${import.meta.env.BASE_URL}mode-config.html`,
       {
         target: 'deltaforce-mode-config-editor',
         features: 'popup=yes,width=1440,height=900,resizable=yes,scrollbars=no',
@@ -2112,7 +2113,8 @@ export default function App() {
       if (!map) return
       const center = map.getCenter()
       lanViewSeqRef.current += 1
-      void pushLanView(center.lat, center.lng, map.getZoom(), lanViewSeqRef.current)
+      // 连同地图旋转角（bearing）一起推送，主客视觉保持一致
+      void pushLanView(center.lat, center.lng, map.getZoom(), lanViewSeqRef.current, map.getBearing())
     }
     push()
     const timer = window.setInterval(push, 800)
@@ -2183,7 +2185,7 @@ export default function App() {
               const data = (await viewRes.json()) as { view?: unknown }
               if (typeof data.view === 'string') {
                 try {
-                  const parsed = JSON.parse(data.view) as { lat?: unknown; lng?: unknown; centerLat?: unknown; centerLng?: unknown; zoom?: unknown; seq?: unknown }
+                  const parsed = JSON.parse(data.view) as { lat?: unknown; lng?: unknown; centerLat?: unknown; centerLng?: unknown; zoom?: unknown; seq?: unknown; bearing?: unknown }
                   // 原生插件存储字段为 lat/lng（centerLat/centerLng 为兼容兜底）
                   const lat = typeof parsed.lat === 'number' ? parsed.lat : parsed.centerLat
                   const lng = typeof parsed.lng === 'number' ? parsed.lng : parsed.centerLng
@@ -2192,6 +2194,7 @@ export default function App() {
                       center: [lat, lng],
                       zoom: parsed.zoom,
                       seq: typeof parsed.seq === 'number' ? parsed.seq : viewRev,
+                      bearing: typeof parsed.bearing === 'number' ? parsed.bearing : undefined,
                     })
                   }
                 } catch {

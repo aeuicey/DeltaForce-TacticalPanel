@@ -107,10 +107,14 @@ public class LanServerPlugin extends Plugin {
             call.reject("centerLat, centerLng, zoom and seq are required");
             return;
         }
+        // 地图旋转角（leaflet-rotate，可选）：主客屏幕一致时访客应同步旋转
+        Double bearing = call.getDouble("bearing");
         String newView = "{\"lat\":" + centerLat
                 + ",\"lng\":" + centerLng
                 + ",\"zoom\":" + zoom
-                + ",\"seq\":" + seq + "}";
+                + ",\"seq\":" + seq
+                + (bearing == null ? "" : ",\"bearing\":" + bearing)
+                + "}";
         int newViewRev;
         synchronized (stateLock) {
             view = newView;
