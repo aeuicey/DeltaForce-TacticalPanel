@@ -17,7 +17,7 @@
 本仓库（[aeuicey/DeltaForce-TacticalPanel](https://github.com/aeuicey/DeltaForce-TacticalPanel)）是上游主仓库 [Deng0430/delta-force](https://github.com/Deng0430/delta-force) 的**开发分支（fork）**，双方保持双向同步：
 
 - **本分支 → 上游**：新功能与修复先在本分支开发验证，再通过 Pull Request 回馈上游。已被上游采纳的改进包括：Android 导出修复（PR #1）、绘图组件锁定（PR #3，上游在其基础上重构进了正式版）、套索锁定保护（PR #4）、兵棋路线鼠标跟随预览（PR #5）、阶段切换小队名单同步修复（PR #6，上游在其上进一步完善了阶段名单不变量）、地图罗盘整圈回绕修复（PR #8）、罗盘步进精度修复（PR #9）。
-- **上游 → 本分支**：上游正式版的内容会定期合并回本分支（当前已合并至 v0.1.6-beta.1，其上游稳定线为 v0.1.5）。
+- **上游 → 本分支**：上游正式版的内容会定期合并回本分支（当前已合并至 v0.1.6-beta.1，其上游稳定线为 v0.1.5）。最近核对 2026-10-24：上游尚无 v0.1.6-beta.1 之后的新提交，本分支已包含其全部内容。
 
 ### 版本号关系
 
@@ -41,7 +41,7 @@
 
 稳定版本请以上游仓库为准；需要最新协作/分享功能请使用本分支的构建产物。
 
-### 本次合并记录（v0.1.4 → v0.1.6-beta.1）
+### 合并记录（v0.1.4 → v0.1.6-beta.1，2026-10-13 同步）
 
 - **文本冲突共 5 个文件，均已手工消解**：`.gitignore`（接纳上游对临时构建目录的忽略规则，保留本分支更宽的 `/release-build*`、`/electron-dist*`）、`README.md`（保留本分支版本号与 Docker 章节，同时接纳上游 0.1.5／0.1.6-beta.1 更新说明与快捷键表）、`package.json` 与 `package-lock.json`（保留本分支版本号 `0.0.2-indoor`）、`android/app/build.gradle`（保留本分支版本名 `0.0.2-indoor`，`versionCode` 由 `2` 提升至 `17`，避免低于上游 `versionCode 16` 后无法覆盖安装）。
 - **功能冲突（Shift＋滚轮旋转 vs 视角锁定）**：上游补全的 `Shift`＋滚轮旋转由 `leaflet-rotate` 的 `shiftKeyRotate` 处理器实现，既不检查本分支的地图手势锁，其滚轮监听还会在非 Shift 滚动时重新启用 `scrollWheelZoom`。现已在「视角跟随锁定」与「文字编辑冻结」两处一并禁用它，锁定不再被滚轮穿透。
