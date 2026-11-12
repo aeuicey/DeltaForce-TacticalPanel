@@ -183,6 +183,11 @@
   /* 触摸滚动配套：overflow-y 由基础规则 .left-panel .panel-body 提供 */
 }
 
+.mobile-layout .left-panel .panel-scroll-track {
+  right: 2px;
+  width: 4px;
+}
+
 .mobile-layout .point-panel {
   right: var(--safe-right);
   width: min(46vw, 200px);
