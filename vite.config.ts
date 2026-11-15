@@ -13,7 +13,7 @@ const demoEntries = {
   videoCover4x3V014: 'demo/v0.1.4/app/video-cover-4x3.html',
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   // GitHub Pages 部署在 /<仓库名>/ 子路径下，CI 通过 VITE_BASE 注入；本地/Electron/Android 保持 '/'
   base: process.env.VITE_BASE ?? '/',
@@ -22,7 +22,7 @@ export default defineConfig({
       input: {
         main: 'index.html',
         modeConfig: 'mode-config.html',
-        ...Object.fromEntries(Object.entries(demoEntries).filter(([, entry]) => existsSync(entry))),
+        ...(mode === 'release' ? {} : Object.fromEntries(Object.entries(demoEntries).filter(([, entry]) => existsSync(entry)))),
       },
     },
   },
@@ -34,4 +34,4 @@ export default defineConfig({
       '/api/share': 'http://localhost:8781',
     },
   },
-})
+}))
