@@ -254,6 +254,7 @@
 - 新增分享模式（Web 独占）：生成随机后缀分享链接（一键复制），主机/访客昵称与人数统计、战术命名、实时同步、访客只读、主机离线即刻过期（访客即时收到失效通知）。
 - 网页端自动识别移动端访问，自动切换触控操作逻辑并提示。
 - 分享需部署内置中继服务器（`npm run share:server` 或 Docker，见下文 Docker 部署）；GitHub Pages 上分享按钮置灰。
+- 修复 GitHub Pages 上本地底图整张空白：攀升、临界点、风暴眼、烬区、堑壕战五张地图自 v0.2.0 起改用仓库内置瓦片，其绝对路径此前未被子路径修正脚本覆盖，在 `/<仓库名>/` 部署下全部 404（腾讯 CDN 底图不受影响）。现已纳入修正范围，详见[子路径资源修正](#子路径资源修正pages-部署)。
 <img width="1151" height="806" alt="image" src="https://github.com/user-attachments/assets/8c5108a1-e7d3-4c90-9244-3850588ccc6f" />
 
 ### 通用
@@ -377,6 +378,31 @@ main 分支每次有新提交，GitHub Actions 自动完成：Pages 部署、Win
 
 > 三个版本共享同一套代码与战术数据格式，战术方案可互通导出。
 
+### 子路径资源修正（Pages 部署）
+
+GitHub Pages 把站点部署在 `/<仓库名>/` 子路径下，而运行时大量资源是以**绝对路径字符串**引用的（`/icons/…`、`/nav_title.png`、`/maps/…`，共 900 余处，含 JSON 数据）。Vite 的 `base` 只重写打包资产与 HTML，不会触碰这些字符串字面量，因此 CI 在 `vite build` 之后额外执行一步：
+
+```bash
+node scripts/fix-pages-paths.cjs /<仓库名>
+```
+
+该脚本扫描 `dist` 下的 `js`/`html`/`json`，给上述绝对路径补上 base 前缀。本地开发、Electron 与 Android 构建不执行此脚本，路径保持 `/`，不受影响。
+
+**修正范围与边界**：
+
+| 前缀 | 处理 | 原因 |
+| --- | --- | --- |
+| `/icons/` | 补前缀 | 干员/载具/道具图标 |
+| `/nav_title.png` | 补前缀 | 顶栏官方 Logo |
+| `/maps/` | 补前缀 | 本地 q80 瓦片底图（攀升/临界点/风暴眼/烬区/堑壕战）与地表高度索引 |
+| `/Game/…` | 不改 | 虚幻引擎资源路径，非 HTTP 请求 |
+| `/api/…` | 不改 | 分享中继接口，由运行时服务器提供 |
+| `public/maps/…` | 不改 | 仓库相对路径，仅离线测试脚本读取 |
+
+`/maps/` 必须同时覆盖 JS 侧常量与 `dist/maps/*-surfaces-v*/manifest.json` 内的 `tileUrl` 字段：`src/utils/mapSurfaceHeights.ts` 会逐字比较两者，只改一边会抛「高度索引格式不匹配」，导致整层地表高度失效。脚本对已有前缀幂等，重复执行不会叠成 `/base/base/maps/…`；任一目标零命中会打印告警，避免同类漏改再次静默上线。
+
+回归测试：`node scripts/test-pages-paths.cjs`（10 项断言，覆盖三种引号写法、manifest 与常量同步、幂等、尾斜杠等价、非 HTTP 路径不受影响，并校验真实源码中的 `/maps/` 引用全部落在修正范围内）。
+
 ## Docker 部署
 
 本仓库通过 GitHub Actions 在每次提交后自动构建 Docker 镜像并推送到在线镜像仓库 **GHCR**（GitHub Container Registry），无需自己构建。
@@ -448,7 +474,7 @@ mindmap
       platform 平台适配层
       utils 存储/导出/坐标工具
     数据链路
-      瓦片与图标 运行时直链腾讯 CDN
+      瓦片与图标 五图内置本地瓦片 其余直链腾讯 CDN
       据点/阶段数据 离线提取编译进包
       用户编辑状态 localStorage 持久化
     构建与发布
@@ -474,6 +500,7 @@ mindmap
 | `npm run build:win` | 构建 Windows 安装包 |
 | `npm run android:sync` | 构建并同步 Android 工程 |
 | `npm run android:open` | 使用 Android Studio 打开工程 |
+| `node scripts/test-pages-paths.cjs` | 回归测试 Pages 子路径资源前缀修正 |
 
 ### 数据存储
 
